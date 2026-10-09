@@ -71,3 +71,8 @@ export const GENDER_LABEL = { male: "Male", female: "Female", any: "Anyone" } as
 export function defaultTitle(direction: keyof typeof DIRECTION_LABEL, date: string) {
   return `Van ${DIRECTION_LABEL[direction].toLowerCase()} · ${formatDate(date)}`;
 }
+
+/** 1500 -> "Rs. 1,500" */
+export function formatFare(rupees: number): string {
+  return `Rs. ${rupees.toLocaleString("en-US")}`;
+}

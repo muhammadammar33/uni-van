@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bus, CalendarDays, CircleAlert, Clock, MapPin, Ticket, X } from "lucide-react";
 import { GenderIcon, SeatLegend, SeatMap, type SeatState } from "@/components/SeatMap";
-import { DIRECTION_LABEL, formatDate, formatTime, normalizePhone, displayPhone } from "@/lib/format";
-import { checkSeat, findSeat, seatStats, type Gender } from "@/lib/layout";
+import { DIRECTION_LABEL, formatDate, formatFare, formatTime, normalizePhone, displayPhone } from "@/lib/format";
+import { checkSeat, fareRange, findSeat, seatFare, seatStats, type Gender } from "@/lib/layout";
 import type { BookingView, PublicTrip } from "@/lib/trips";
 
 const POLL_MS = 10_000;
@@ -85,6 +85,13 @@ export function BookingFlow({ slug, initial }: { slug: string; initial: PublicTr
 
   const gender = profile.gender;
   const stats = useMemo(() => seatStats(trip.layout, trip.taken), [trip]);
+  const fares = useMemo(() => fareRange(trip.layout, trip.fare), [trip]);
+  // Seats only show their price when prices differ.
+  const faresVary = !!fares && fares.min !== fares.max;
+  const priceCaption = (id: string) => {
+    const f = faresVary ? seatFare(trip.layout, id, trip.fare) : null;
+    return f === null ? undefined : `Rs${f}`;
+  };
 
   // A seat picked earlier can become unavailable after a refresh (someone else took it or sat next to it).
   const seatValid = !!seat && !!gender && checkSeat(trip.layout, trip.taken, seat, gender).ok;
@@ -98,7 +105,7 @@ export function BookingFlow({ slug, initial }: { slug: string; initial: PublicTr
     if (!gender) return { state: "free", title: "Choose male or female first" };
     const check = checkSeat(trip.layout, trip.taken, id, gender);
     if (!check.ok) return { state: "blocked", title: check.reason };
-    return { state: id === selected ? "selected" : "free" };
+    return { state: id === selected ? "selected" : "free", caption: priceCaption(id) };
   };
 
   const updateProfile = (patch: Partial<Profile>) => {
@@ -169,6 +176,11 @@ export function BookingFlow({ slug, initial }: { slug: string; initial: PublicTr
           )}
           <span>{trip.vehicleName}</span>
         </div>
+        {fares && (
+          <p className="mt-2 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-800">
+            {fares.min === fares.max ? `${formatFare(fares.min)} per seat` : `${formatFare(fares.min)} to ${formatFare(fares.max)} per seat`}
+          </p>
+        )}
         {trip.notes && <p className="mt-3 whitespace-pre-line rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{trip.notes}</p>}
       </header>
 
@@ -308,7 +320,10 @@ export function BookingFlow({ slug, initial }: { slug: string; initial: PublicTr
             <div className="min-w-0 flex-1 text-sm">
               {selected ? (
                 <>
-                  <div className="font-semibold">Seat {findSeat(trip.layout, selected)?.label}</div>
+                  <div className="font-semibold">
+                    Seat {findSeat(trip.layout, selected)?.label}
+                    {seatFare(trip.layout, selected, trip.fare) !== null && ` · ${formatFare(seatFare(trip.layout, selected, trip.fare)!)}`}
+                  </div>
                   <div className="truncate text-slate-600">
                     {selectedStop ? `${selectedStop.name} · ${formatTime(selectedStop.time)}` : `Choose your ${stopWord} point`}
                   </div>
@@ -360,6 +375,12 @@ function BookingTicket({ booking, toHome, onCancel, busy }: { booking: BookingVi
             {booking.stop} · {formatTime(booking.time)}
           </dd>
         </div>
+        {booking.fare !== null && (
+          <div className="col-span-2">
+            <dt className="text-xs uppercase tracking-wide text-slate-500">Fare</dt>
+            <dd className="font-semibold">{formatFare(booking.fare)}</dd>
+          </div>
+        )}
         <div className="col-span-2 text-sm text-slate-600">
           {booking.name} · {displayPhone(booking.phone)}
         </div>

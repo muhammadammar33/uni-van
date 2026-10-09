@@ -4,11 +4,16 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, requireDb, schema as s } from "@/lib/db";
 import { nowLocal } from "@/lib/format";
-import { checkSeat, findSeat, GENDERS, type Taken } from "@/lib/layout";
+import { checkSeat, findSeat, GENDERS, seatFare, type Taken } from "@/lib/layout";
 import { normalizePhone } from "@/lib/format";
 
 export function newSlug() {
   return randomBytes(6).toString("base64url");
+}
+
+/** Longer secret for the driver's link, which shows names and phone numbers. */
+export function newDriverToken() {
+  return randomBytes(16).toString("base64url");
 }
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -29,13 +34,11 @@ export function takenSeats(bookings: Pick<s.Booking, "seatId" | "gender">[]): Ta
   return Object.fromEntries(bookings.map((b) => [b.seatId, b.gender]));
 }
 
-export async function loadTrip(where: { slug: string } | { id: number }) {
+export async function loadTrip(where: { slug: string } | { id: number } | { driverToken: string }) {
   if (!db) return null;
-  const [trip] = await db
-    .select()
-    .from(s.trips)
-    .where("slug" in where ? eq(s.trips.slug, where.slug) : eq(s.trips.id, where.id))
-    .limit(1);
+  const cond =
+    "slug" in where ? eq(s.trips.slug, where.slug) : "id" in where ? eq(s.trips.id, where.id) : eq(s.trips.driverToken, where.driverToken);
+  const [trip] = await db.select().from(s.trips).where(cond).limit(1);
   if (!trip) return null;
   const [stops, bookings] = await Promise.all([
     db.select().from(s.stops).where(eq(s.stops.tripId, trip.id)).orderBy(asc(s.stops.sortOrder), asc(s.stops.time)),
@@ -59,6 +62,7 @@ export async function publicTrip(slug: string) {
     closesAt: trip.closesAt,
     closed: closedReason(trip),
     layout: trip.layout,
+    fare: trip.fare,
     stops: stops.map((st) => ({ id: st.id, name: st.name, time: st.time })),
     taken: takenSeats(bookings),
   };
@@ -80,7 +84,17 @@ export class BookingError extends Error {
   }
 }
 
-export type BookingView = { code: string; name: string; phone: string; gender: s.Booking["gender"]; seatId: string; seatLabel: string; stop: string; time: string };
+export type BookingView = {
+  code: string;
+  name: string;
+  phone: string;
+  gender: s.Booking["gender"];
+  seatId: string;
+  seatLabel: string;
+  stop: string;
+  time: string;
+  fare: number | null;
+};
 
 function view(trip: s.Trip, stop: s.Stop, b: s.Booking): BookingView {
   return {
@@ -92,6 +106,7 @@ function view(trip: s.Trip, stop: s.Stop, b: s.Booking): BookingView {
     seatLabel: findSeat(trip.layout, b.seatId)?.label ?? b.seatId,
     stop: stop.name,
     time: stop.time,
+    fare: b.fare,
   };
 }
 
@@ -131,7 +146,16 @@ export async function bookSeat(where: { slug: string } | { id: number }, raw: un
 
     const [booking] = await tx
       .insert(s.bookings)
-      .values({ tripId: trip.id, stopId: stop.id, seatId: input.seatId, name: input.name, phone, gender: input.gender, code: newCode() })
+      .values({
+        tripId: trip.id,
+        stopId: stop.id,
+        seatId: input.seatId,
+        name: input.name,
+        phone,
+        gender: input.gender,
+        code: newCode(),
+        fare: seatFare(trip.layout, input.seatId, trip.fare),
+      })
       .returning();
     return view(trip, stop, booking);
   });
@@ -161,4 +185,74 @@ export async function cancelBooking(slug: string, phone: string, code: string) {
   if (!row) throw new BookingError("No booking found for that phone number and code.", 404);
   if (closedReason(row.trip)) throw new BookingError("Booking is closed, so changes go through the admin now.", 409);
   await requireDb().delete(s.bookings).where(eq(s.bookings.id, row.booking.id));
+}
+
+/* ---------- Driver view ---------- */
+
+export type DriverPassenger = {
+  id: number;
+  seatLabel: string;
+  name: string;
+  phone: string;
+  gender: s.Booking["gender"];
+  fare: number | null;
+  boarded: boolean;
+  paid: boolean;
+};
+
+/** Everything the driver needs, in route order. Only reachable with the trip's secret driver token. */
+export async function driverTrip(token: string) {
+  if (!token || token.length < 16) return null;
+  const data = await loadTrip({ driverToken: token });
+  if (!data) return null;
+  const { trip, stops, bookings } = data;
+  const passenger = (b: s.Booking): DriverPassenger => ({
+    id: b.id,
+    seatLabel: findSeat(trip.layout, b.seatId)?.label ?? b.seatId,
+    name: b.name,
+    phone: b.phone,
+    gender: b.gender,
+    fare: b.fare,
+    boarded: b.boarded,
+    paid: b.paid,
+  });
+  return {
+    title: trip.title,
+    direction: trip.direction,
+    date: trip.date,
+    departTime: trip.departTime,
+    vehicleName: trip.vehicleName,
+    stops: stops.map((st) => ({
+      id: st.id,
+      name: st.name,
+      time: st.time,
+      passengers: bookings
+        .filter((b) => b.stopId === st.id)
+        .map(passenger)
+        .sort((a, b) => Number(a.seatLabel) - Number(b.seatLabel)),
+    })),
+  };
+}
+export type DriverTrip = NonNullable<Awaited<ReturnType<typeof driverTrip>>>;
+
+export const markInput = z.object({
+  bookingId: z.number().int().positive(),
+  field: z.enum(["boarded", "paid"]),
+  value: z.boolean(),
+});
+
+/** Ticks a passenger as boarded or paid. `where` is the driver token, or the trip id for admins. */
+export async function markBooking(where: { driverToken: string } | { id: number }, raw: unknown) {
+  const parsed = markInput.safeParse(raw);
+  if (!parsed.success) throw new BookingError("Invalid request");
+  const { bookingId, field, value } = parsed.data;
+  const tripCond = "id" in where ? eq(s.trips.id, where.id) : eq(s.trips.driverToken, where.driverToken);
+  const [trip] = await requireDb().select({ id: s.trips.id }).from(s.trips).where(tripCond).limit(1);
+  if (!trip) throw new BookingError("Trip not found", 404);
+  const updated = await requireDb()
+    .update(s.bookings)
+    .set({ [field]: value })
+    .where(and(eq(s.bookings.id, bookingId), eq(s.bookings.tripId, trip.id)))
+    .returning({ id: s.bookings.id });
+  if (!updated.length) throw new BookingError("That passenger is no longer on this trip.", 404);
 }

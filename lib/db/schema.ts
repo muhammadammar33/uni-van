@@ -1,4 +1,4 @@
-import { index, integer, jsonb, pgEnum, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgEnum, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import type { Layout } from "../layout";
 
 export const directionEnum = pgEnum("trip_direction", ["to_uni", "to_home"]);
@@ -38,6 +38,10 @@ export const trips = pgTable(
     vehicleName: text("vehicle_name").notNull(),
     /** The trip's own copy of the seating plan, so editing a saved vehicle never moves booked seats. */
     layout: jsonb("layout").$type<Layout>().notNull(),
+    /** Fare per seat in whole rupees; a seat can override it in the layout. Null = no fare shown. */
+    fare: integer("fare"),
+    /** Secret for the driver's view: /d/<driverToken> */
+    driverToken: text("driver_token").notNull().unique(),
     status: tripStatusEnum("status").default("open").notNull(),
     /** Local "YYYY-MM-DDTHH:MM" after which booking stops; null = until the admin closes it. */
     closesAt: text("closes_at"),
@@ -73,6 +77,10 @@ export const bookings = pgTable(
     gender: genderEnum("gender").notNull(),
     /** Short code the passenger uses to look up or cancel their booking. */
     code: text("code").notNull(),
+    /** Fare for this seat when it was booked, so later fare changes don't alter what the passenger was told. */
+    fare: integer("fare"),
+    boarded: boolean("boarded").default(false).notNull(),
+    paid: boolean("paid").default(false).notNull(),
     createdAt,
   },
   (t) => [uniqueIndex("bookings_trip_seat_uq").on(t.tripId, t.seatId), uniqueIndex("bookings_trip_phone_uq").on(t.tripId, t.phone)],

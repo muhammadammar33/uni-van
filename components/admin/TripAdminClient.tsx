@@ -1,14 +1,25 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { MessageCircle, Phone, Send, Trash2, X } from "lucide-react";
-import { adminBook, duplicateTrip, removeBooking, type FormState } from "@/app/admin/actions";
+import { Banknote, MessageCircle, Phone, RefreshCw, Send, Trash2, UserCheck, X } from "lucide-react";
+import { adminBook, duplicateTrip, removeBooking, resetDriverLink, setBookingFlag, type FormState } from "@/app/admin/actions";
 import { CopyButton } from "@/components/admin/CopyButton";
 import { GenderIcon, SeatLegend, SeatMap, type SeatState } from "@/components/SeatMap";
-import { displayPhone, formatTime } from "@/lib/format";
+import { displayPhone, formatFare, formatTime } from "@/lib/format";
 import { checkSeat, findSeat, GENDERS, type Gender, type Layout, type Taken } from "@/lib/layout";
 
-export type AdminBooking = { id: number; seatId: string; seatLabel: string; name: string; phone: string; gender: Gender; stopId: number };
+export type AdminBooking = {
+  id: number;
+  seatId: string;
+  seatLabel: string;
+  name: string;
+  phone: string;
+  gender: Gender;
+  stopId: number;
+  fare: number | null;
+  boarded: boolean;
+  paid: boolean;
+};
 type Stop = { id: number; name: string; time: string };
 
 export function ShareBox({ url, message }: { url: string; message: string }) {
@@ -115,7 +126,12 @@ function PassengerCard({ tripId, booking, stop, toHome, onClose }: { tripId: num
       </div>
       <p className="mb-3 text-sm text-slate-600">
         {toHome ? "Drop-off" : "Pickup"}: {stop ? `${stop.name} · ${formatTime(stop.time)}` : "?"}
+        {booking.fare !== null && ` · ${formatFare(booking.fare)}`}
       </p>
+      <div className="mb-3 flex gap-2">
+        <FlagToggle tripId={tripId} booking={booking} field="boarded" label={toHome ? "Dropped" : "Boarded"} />
+        <FlagToggle tripId={tripId} booking={booking} field="paid" label="Paid" />
+      </div>
       <div className="flex flex-wrap gap-2">
         <a href={`tel:+${booking.phone}`} className="btn-ghost">
           <Phone className="size-4" /> {displayPhone(booking.phone)}
@@ -224,5 +240,58 @@ export function DuplicateForm({ tripId, nextDate, returnLabel }: { tripId: numbe
         {pending ? "Copying…" : "Copy trip"}
       </button>
     </form>
+  );
+}
+
+/** Boarded / paid tick, also settable by the driver from their page. */
+export function FlagToggle({ tripId, booking, field, label }: { tripId: number; booking: AdminBooking; field: "boarded" | "paid"; label: string }) {
+  const [pending, start] = useTransition();
+  const on = booking[field];
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      aria-pressed={on}
+      title={on ? `Marked ${label.toLowerCase()}` : `Mark ${label.toLowerCase()}`}
+      onClick={() => start(() => setBookingFlag(tripId, booking.id, field, !on))}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold transition ${
+        on ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 text-slate-400 hover:border-slate-300"
+      } ${pending ? "opacity-60" : ""}`}
+    >
+      {field === "paid" ? <Banknote className="size-3" /> : <UserCheck className="size-3" />}
+      {label}
+    </button>
+  );
+}
+
+export function DriverLinkBox({ tripId, url, title }: { tripId: number; url: string; title: string }) {
+  const [pending, start] = useTransition();
+  const message = `🚐 Passenger list for *${title}*\nOpen it on the day, mark who boarded and who paid:\n${url}`;
+  return (
+    <section className="card">
+      <h2 className="mb-1 font-semibold">Driver link</h2>
+      <p className="mb-3 text-sm text-slate-500">
+        Send this to the driver only, not the group: it shows passengers&apos; names and phone numbers. No login needed. The driver sees passengers stop by stop and can mark them boarded and paid.
+      </p>
+      <div className="mb-3 flex items-center gap-2 rounded-lg bg-slate-50 p-2 pl-3 text-sm">
+        <a href={url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate font-medium text-brand hover:underline">
+          {url}
+        </a>
+        <CopyButton text={url} label="Copy" />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer" className="btn bg-[#25D366] text-white hover:bg-[#1ebe5b]">
+          <Send className="size-4" /> Send to driver
+        </a>
+        <button
+          type="button"
+          className="btn-ghost"
+          disabled={pending}
+          onClick={() => confirm("Make a new driver link? The current one stops working.") && start(() => resetDriverLink(tripId))}
+        >
+          <RefreshCw className="size-4" /> New link
+        </button>
+      </div>
+    </section>
   );
 }

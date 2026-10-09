@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkSeat, genderClashes, hiaceLayout, layoutConflicts, neighbours, parseLayout, seatList, seatStats } from "./layout";
-import { formatDate, formatTime, normalizePhone } from "./format";
+import { checkSeat, fareRange, genderClashes, seatFare, hiaceLayout, layoutConflicts, neighbours, parseLayout, seatList, seatStats } from "./layout";
+import { formatDate, formatFare, formatTime, normalizePhone } from "./format";
 
 const hiace = hiaceLayout();
 
@@ -77,4 +77,22 @@ test("times format as 12-hour", () => {
 test("dates format the same everywhere", () => {
   assert.equal(formatDate("2026-10-12"), "Mon, 12 Oct");
   assert.equal(formatDate("2026-10-09", true), "Friday, 9 October 2026");
+});
+
+test("seat fares fall back to the trip fare", () => {
+  const l = structuredClone(hiace);
+  l.cells[0][2] = { kind: "seat", gender: "female", fare: 400 };
+  assert.equal(seatFare(l, "0-2", 300), 400);
+  assert.equal(seatFare(l, "0-3", 300), 300);
+  assert.equal(seatFare(l, "0-3", null), null);
+  assert.deepEqual(fareRange(l, 300), { min: 300, max: 400 });
+  assert.deepEqual(fareRange(l, null), { min: 400, max: 400 });
+  assert.equal(fareRange(hiace, null), null);
+  assert.equal(formatFare(1500), "Rs. 1,500");
+});
+
+test("parseLayout keeps seat fares", () => {
+  const l = parseLayout({ rows: 1, cols: 2, cells: [[{ kind: "seat", fare: 350 }, { kind: "door", fare: 9 }]] });
+  assert.deepEqual(l.cells[0], [{ kind: "seat", gender: "any", fare: 350 }, { kind: "door" }]);
+  assert.throws(() => parseLayout({ rows: 1, cols: 1, cells: [[{ kind: "seat", fare: -5 }]] }));
 });

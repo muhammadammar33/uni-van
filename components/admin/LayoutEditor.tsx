@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { DoorOpen, Eraser, Lock, Mars, Minus, Plus, TriangleAlert, Venus } from "lucide-react";
+import { Banknote, DoorOpen, Eraser, Lock, Mars, Minus, Plus, TriangleAlert, Venus } from "lucide-react";
 import type { FormState } from "@/app/admin/actions";
 import { FixtureCell, SteeringWheel, VehicleFrame } from "@/components/SeatMap";
-import { emptyLayout, genderClashes, MAX_COLS, MAX_ROWS, seatId, seatList, type Cell, type Gender, type Layout, type SeatGender } from "@/lib/layout";
+import { emptyLayout, genderClashes, MAX_COLS, MAX_FARE, MAX_ROWS, seatId, seatList, type Cell, type Gender, type Layout, type SeatGender } from "@/lib/layout";
 
 type Tool = { key: string; label: string; cell: Cell; icon: React.ReactNode };
+
+/** Not a cell type: sets (or clears) the price of the seats it touches. */
+const FARE_TOOL: Tool = { key: "fare", label: "Seat price", cell: { kind: "seat" }, icon: <Banknote className="size-4 text-emerald-700" /> };
 
 const TOOLS: Tool[] = [
   { key: "female", label: "Female seat", cell: { kind: "seat", gender: "female" }, icon: <Venus className="size-4 text-female" /> },
@@ -48,6 +51,8 @@ export function LayoutEditor({
   const [layout, setLayout] = useState(initial);
   const [name, setName] = useState(initialName ?? "");
   const [tool, setTool] = useState<Tool>(TOOLS[0]);
+  /** Price the fare tool applies; empty clears a seat's own price so it uses the trip fare. */
+  const [fareInput, setFareInput] = useState("");
   const [message, setMessage] = useState<FormState>();
   const [dirty, setDirty] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -72,6 +77,24 @@ export function LayoutEditor({
 
   const paint = (r: number, c: number) => {
     const id = seatId(r, c);
+    if (tool.key === FARE_TOOL.key) {
+      const fare = fareInput.trim() === "" ? undefined : Number(fareInput);
+      if (fare !== undefined && (!Number.isInteger(fare) || fare < 0 || fare > MAX_FARE)) {
+        setMessage({ error: "Enter the seat price in whole rupees." });
+        return;
+      }
+      setLayout((prev) => {
+        const cur = prev.cells[r][c];
+        if (cur.kind !== "seat" || cur.fare === fare) return prev;
+        const cells = prev.cells.map((row) => [...row]);
+        const { fare: _old, ...rest } = cur; // eslint-disable-line @typescript-eslint/no-unused-vars
+        cells[r][c] = fare === undefined ? rest : { ...rest, fare };
+        return { ...prev, cells };
+      });
+      setDirty(true);
+      setMessage(undefined);
+      return;
+    }
     if (!allowed(id, tool.cell)) {
       setMessage({ error: `Seat ${labels.get(id)} has a ${booked[id]} passenger, so it can only be a ${booked[id]} or open seat.` });
       return;
@@ -81,7 +104,8 @@ export function LayoutEditor({
       const cur = prev.cells[r][c];
       if (cur.kind === tool.cell.kind && cur.gender === tool.cell.gender) return prev;
       const cells = prev.cells.map((row) => [...row]);
-      cells[r][c] = { ...tool.cell };
+      // A seat keeps its own price when only its gender changes.
+      cells[r][c] = tool.cell.kind === "seat" && cur.kind === "seat" && cur.fare !== undefined ? { ...tool.cell, fare: cur.fare } : { ...tool.cell };
       return { ...prev, cells };
     });
     setDirty(true);
@@ -92,7 +116,7 @@ export function LayoutEditor({
     change({
       ...layout,
       cells: layout.cells.map((row, r) =>
-        row.map((cell, c) => (cell.kind === "seat" && allowed(seatId(r, c), { kind: "seat", gender }) ? { kind: "seat", gender } : cell)),
+        row.map((cell, c) => (cell.kind === "seat" && allowed(seatId(r, c), { kind: "seat", gender }) ? { ...cell, gender } : cell)),
       ),
     });
 
@@ -133,7 +157,9 @@ export function LayoutEditor({
                     type="button"
                     aria-label={cell.kind === "seat" ? `Seat ${labels.get(id)} (${cell.gender})` : cell.kind}
                     onPointerDown={(e) => {
-                      (e.target as Element).releasePointerCapture?.(e.pointerId);
+                      // Touch captures the pointer on the first cell; release it so dragging reaches the others.
+                      const el = e.target as Element;
+                      if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
                       painting.current = true;
                       paint(r, c);
                     }}
@@ -144,8 +170,11 @@ export function LayoutEditor({
                       <span
                         className={`flex size-full flex-col items-center justify-center rounded-t-2xl rounded-b-lg border-2 text-sm font-bold ${SEAT_STYLE[cell.gender ?? "any"]}`}
                       >
-                        {labels.get(id)}
-                        {booked[id] && <Lock className="size-3" />}
+                        <span className="flex items-center gap-0.5">
+                          {labels.get(id)}
+                          {booked[id] && <Lock className="size-3" />}
+                        </span>
+                        {cell.fare !== undefined && <span className="text-[9px] font-semibold leading-none text-emerald-700">Rs{cell.fare}</span>}
                       </span>
                     ) : cell.kind === "empty" ? (
                       <span className="block size-full rounded-xl border border-dashed border-slate-200" />
@@ -173,7 +202,7 @@ export function LayoutEditor({
         <div className="card">
           <h3 className="mb-2 text-sm font-semibold">Tool</h3>
           <div className="grid grid-cols-2 gap-1.5">
-            {TOOLS.map((t) => (
+            {[...TOOLS, FARE_TOOL].map((t) => (
               <button
                 key={t.key}
                 type="button"
@@ -188,6 +217,24 @@ export function LayoutEditor({
               </button>
             ))}
           </div>
+          {tool.key === FARE_TOOL.key && (
+            <div className="mt-3 rounded-lg bg-emerald-50 p-2.5">
+              <label className="label !text-xs" htmlFor="seat-fare">
+                Price for the seats you tap (Rs.)
+              </label>
+              <input
+                id="seat-fare"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                className="input"
+                value={fareInput}
+                onChange={(e) => setFareInput(e.target.value)}
+                placeholder="Empty = trip fare"
+              />
+              <p className="mt-1 text-[11px] text-emerald-900">Leave it empty and tap a seat to remove its own price, so it uses the trip&apos;s fare.</p>
+            </div>
+          )}
           <h3 className="mb-2 mt-4 text-sm font-semibold">All seats</h3>
           <div className="flex gap-1.5">
             <button type="button" className="btn-ghost flex-1 !px-2 !py-1.5 text-xs" onClick={() => setAll("female")}>

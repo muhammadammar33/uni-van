@@ -8,8 +8,8 @@ import { z } from "zod";
 import { endSession, requireAdmin, startSession } from "@/lib/auth";
 import { db, requireDb, schema as s } from "@/lib/db";
 import { defaultTitle } from "@/lib/format";
-import { layoutConflicts, parseLayout, type Layout } from "@/lib/layout";
-import { bookSeat, BookingError, loadTrip, newSlug, takenSeats } from "@/lib/trips";
+import { layoutConflicts, MAX_FARE, parseLayout, type Layout } from "@/lib/layout";
+import { bookSeat, BookingError, loadTrip, markBooking, newDriverToken, newSlug, takenSeats } from "@/lib/trips";
 
 export type FormState = { error?: string; ok?: string } | undefined;
 
@@ -85,6 +85,7 @@ const tripSchema = z.object({
   departTime: z.union([time, z.literal("")]),
   closesAt: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/), z.literal("")]),
   notes: z.string().trim().max(1000),
+  fare: z.union([z.literal(""), z.coerce.number().int("Fare must be a whole number").min(0, "Fare can't be negative").max(MAX_FARE)]),
   stops: z.array(stopSchema).min(1, "Add at least one stop"),
 });
 
@@ -100,6 +101,7 @@ function readTripForm(form: FormData) {
     departTime: form.get("departTime") ?? "",
     closesAt: form.get("closesAt") ?? "",
     notes: form.get("notes") ?? "",
+    fare: String(form.get("fare") ?? "").trim(),
     stops,
   });
   return {
@@ -110,6 +112,7 @@ function readTripForm(form: FormData) {
       departTime: data.departTime || null,
       closesAt: data.closesAt || null,
       notes: data.notes || null,
+      fare: data.fare === "" ? null : data.fare,
     },
     stops: data.stops,
   };
@@ -127,7 +130,7 @@ export async function createTrip(_: FormState, form: FormData): Promise<FormStat
     id = await database.transaction(async (tx) => {
       const [trip] = await tx
         .insert(s.trips)
-        .values({ ...fields, slug: newSlug(), vehicleName: vehicle.name, layout: vehicle.layout })
+        .values({ ...fields, slug: newSlug(), driverToken: newDriverToken(), vehicleName: vehicle.name, layout: vehicle.layout })
         .returning({ id: s.trips.id });
       await tx.insert(s.stops).values(stops.map((st, i) => ({ tripId: trip.id, name: st.name, time: st.time, sortOrder: i })));
       return trip.id;
@@ -185,6 +188,13 @@ export async function setTripStatus(id: number, status: "open" | "closed") {
   revalidatePath("/admin", "layout");
 }
 
+/** New driver link: the old one stops working (e.g. a different driver today). */
+export async function resetDriverLink(id: number) {
+  await requireAdmin();
+  await requireDb().update(s.trips).set({ driverToken: newDriverToken() }).where(eq(s.trips.id, id));
+  revalidatePath(`/admin/trips/${id}`);
+}
+
 export async function deleteTrip(id: number) {
   await requireAdmin();
   await requireDb().delete(s.trips).where(eq(s.trips.id, id));
@@ -209,6 +219,8 @@ export async function duplicateTrip(id: number, _: FormState, form: FormData): P
       .insert(s.trips)
       .values({
         slug: newSlug(),
+        driverToken: newDriverToken(),
+        fare: trip.fare,
         title: autoTitle || reverse ? defaultTitle(direction, date) : trip.title,
         direction,
         date,
@@ -298,5 +310,11 @@ export async function adminBook(tripId: number, input: Record<string, unknown>):
 export async function removeBooking(tripId: number, bookingId: number) {
   await requireAdmin();
   await requireDb().delete(s.bookings).where(and(eq(s.bookings.id, bookingId), eq(s.bookings.tripId, tripId)));
+  revalidatePath(`/admin/trips/${tripId}`);
+}
+
+export async function setBookingFlag(tripId: number, bookingId: number, field: "boarded" | "paid", value: boolean) {
+  await requireAdmin();
+  await markBooking({ id: tripId }, { bookingId, field, value });
   revalidatePath(`/admin/trips/${tripId}`);
 }

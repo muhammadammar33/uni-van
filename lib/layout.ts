@@ -14,15 +14,18 @@ export type SeatGender = (typeof SEAT_GENDERS)[number];
 export const GENDERS = ["male", "female"] as const;
 export type Gender = (typeof GENDERS)[number];
 
-export type Cell = { kind: CellKind; gender?: SeatGender };
+/** `fare` (whole rupees) overrides the trip's fare for one seat, e.g. a pricier front seat. */
+export type Cell = { kind: CellKind; gender?: SeatGender; fare?: number };
 export type Layout = { rows: number; cols: number; cells: Cell[][] };
 
 export const MAX_ROWS = 12;
 export const MAX_COLS = 6;
+export const MAX_FARE = 100_000;
 
 const cellSchema = z.object({
   kind: z.enum(CELL_KINDS),
   gender: z.enum(SEAT_GENDERS).optional(),
+  fare: z.number().int().min(0).max(MAX_FARE).optional(),
 });
 
 export const layoutSchema = z
@@ -36,7 +39,9 @@ export const layoutSchema = z
   .transform((l): Layout => ({
     ...l,
     // Only seats carry a gender.
-    cells: l.cells.map((row) => row.map((c) => (c.kind === "seat" ? { kind: "seat", gender: c.gender ?? "any" } : { kind: c.kind }))),
+    cells: l.cells.map((row) =>
+      row.map((c): Cell => (c.kind === "seat" ? { kind: "seat", gender: c.gender ?? "any", ...(c.fare !== undefined ? { fare: c.fare } : {}) } : { kind: c.kind })),
+    ),
   }));
 
 export function parseLayout(input: unknown): Layout {
@@ -45,14 +50,14 @@ export function parseLayout(input: unknown): Layout {
 
 export const seatId = (r: number, c: number) => `${r}-${c}`;
 
-export type Seat = { id: string; r: number; c: number; label: string; gender: SeatGender };
+export type Seat = { id: string; r: number; c: number; label: string; gender: SeatGender; fare?: number };
 
 /** Seats in reading order (front to back, left to right), numbered from 1. */
 export function seatList(layout: Layout): Seat[] {
   const seats: Seat[] = [];
   layout.cells.forEach((row, r) =>
     row.forEach((cell, c) => {
-      if (cell.kind === "seat") seats.push({ id: seatId(r, c), r, c, label: String(seats.length + 1), gender: cell.gender ?? "any" });
+      if (cell.kind === "seat") seats.push({ id: seatId(r, c), r, c, label: String(seats.length + 1), gender: cell.gender ?? "any", fare: cell.fare });
     }),
   );
   return seats;
@@ -165,4 +170,18 @@ export function busLayout(rows = 6): Layout {
     cols: 5,
     cells: [[{ kind: "driver" }, E, E, { kind: "door" }, E], ...body, [S, S, S, S, S]],
   };
+}
+
+/** What a seat costs: its own fare if the admin set one, otherwise the trip's fare (null = no fare set). */
+export function seatFare(layout: Layout, id: string, tripFare: number | null): number | null {
+  return findSeat(layout, id)?.fare ?? tripFare;
+}
+
+/** Lowest and highest fare across the seats, or null when no fare is set anywhere. */
+export function fareRange(layout: Layout, tripFare: number | null): { min: number; max: number } | null {
+  const fares = seatList(layout).flatMap((s) => {
+    const f = s.fare ?? tripFare;
+    return f === null || f === undefined ? [] : [f];
+  });
+  return fares.length ? { min: Math.min(...fares), max: Math.max(...fares) } : null;
 }

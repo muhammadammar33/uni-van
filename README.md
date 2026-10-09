@@ -5,6 +5,8 @@ Seat booking for a university van. Instead of messaging the admin in the WhatsAp
 - **Admin** creates a trip (to university, or back home), adds the stops with pickup / drop-off times, and shares the link in the WhatsApp group with one tap.
 - **Students** open the link, choose Female or Male, choose their stop (they see its time), and tap a seat on a picture of the van. No account needed: name and phone number.
 - **Seating rules:** the admin marks each seat **Female**, **Male** or **Anyone**. On top of that, the app never lets a male and a female sit **side by side**: once someone takes a seat, the seats directly next to it (same row, no aisle in between) are only open to the same gender. Seats across the aisle are fine.
+- **Fares:** set a fare per seat on each trip (e.g. Rs. 300), and optionally a different price on single seats (e.g. Rs. 400 for the front). Students see the price before booking and on their ticket; the price is locked in when they book.
+- **Driver view:** a private link for the driver, no login: passengers stop by stop in route order, with call / WhatsApp buttons and **Boarded** and **Paid** ticks, plus totals collected.
 - **Any vehicle:** the seating is a grid the admin draws: seats, aisle, door, driver. A Toyota Hiace (15 seats) and a Coaster (29 seats) are included to start from.
 
 ## Pages
@@ -12,10 +14,11 @@ Seat booking for a university van. Instead of messaging the admin in the WhatsAp
 | Path | Who | Purpose |
 | --- | --- | --- |
 | `/t/<code>` | Students | Book a seat on a trip (the link shared in WhatsApp) |
+| `/d/<secret>` | Driver | Passengers by stop, call / WhatsApp, mark boarded and paid (link from the trip page) |
 | `/admin` | Admin | Upcoming and past trips, with seats booked |
-| `/admin/trips/new` | Admin | New trip: direction, date, vehicle, stops and times, note, booking deadline |
-| `/admin/trips/<id>` | Admin | Share link + WhatsApp message, seat map with passenger names, book a seat for someone, passengers by stop (copy as a list for the driver), close/reopen booking, copy the trip to another date or as the return trip |
-| `/admin/trips/<id>/seats` | Admin | Change this trip's seating (booked seats are locked) |
+| `/admin/trips/new` | Admin | New trip: direction, date, vehicle, fare per seat, stops and times, note, booking deadline |
+| `/admin/trips/<id>` | Admin | Share link + WhatsApp message, driver link, fares expected / collected, seat map with passenger names, book a seat for someone, passengers by stop (copy as a list for the driver), close/reopen booking, copy the trip to another date or as the return trip |
+| `/admin/trips/<id>/seats` | Admin | Change this trip's seating and single-seat prices (booked seats are locked) |
 | `/admin/vehicles` | Admin | Saved seating plans for new trips |
 | `/admin/account` | Admin | Add admins/drivers, change password |
 
@@ -37,7 +40,13 @@ Booking closes when the admin closes it, at the optional **Stop booking at** tim
 1. Create the morning trip once with all the stops.
 2. On its page use **Copy this trip** for the next day, or tick **Make it the return trip** for the trip home: direction flipped, stops reversed, then set the drop-off times.
 3. Tap **Share on WhatsApp** and send it to the group.
-4. Before leaving, **Copy list** gives the driver the passengers by stop.
+4. Send the driver the **Driver link** from the trip page (**Send to driver**). On the road the driver ticks who boarded and who paid; you see the same ticks and the amount collected on the trip page. **New link** makes the old driver link stop working (e.g. a different driver today).
+
+### Fares
+
+- **Fare per seat** on the trip form applies to every seat.
+- For a seat that costs more or less, open **Seating**, choose the **Seat price** tool, type the price and tap the seats. Leave the price empty and tap to go back to the trip fare. Seat prices can also be saved on a vehicle so every new trip gets them.
+- Each booking keeps the price it was booked at, so changing the fare later doesn't change what booked students were told.
 
 ## Stack
 
@@ -78,13 +87,14 @@ npm run dev
 ```
 app/t/[slug]/        Student booking page
 app/api/t/[slug]/    Seat map, book, look up and cancel (JSON)
+app/d/[token]/       Driver view; app/api/d/[token]/ its data and boarded/paid ticks
 app/admin/           Login, trips, seating editor, vehicles, account; actions.ts holds the server actions
 components/          SeatMap (shared), BookingFlow (student), admin/ (trip form, layout editor, trip tools)
 lib/layout.ts        Vehicle grid, seat numbering, neighbour + gender rules (tested in layout.test.ts)
-lib/trips.ts         Loading trips, booking (locked transaction), lookup, cancel
+lib/trips.ts         Loading trips, booking (locked transaction), lookup, cancel, driver view + boarded/paid
 lib/db/schema.ts     Tables: admins, vehicles, trips, stops, bookings
 drizzle/             SQL migrations
 scripts/db-setup.ts  Migrate, default vehicles, first admin
 ```
 
-Privacy: the public trip page only shows which seats are taken and by which gender. Names and phone numbers are visible to admins only.
+Privacy: the public trip page only shows which seats are taken and by which gender. Names and phone numbers are visible to admins and to whoever has the trip's driver link, so send that link to the driver only.

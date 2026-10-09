@@ -4,10 +4,10 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Armchair, Lock, LockOpen, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
 import { CopyButton } from "@/components/admin/CopyButton";
-import { AdminSeatPanel, DuplicateForm, RemoveBookingButton, ShareBox, type AdminBooking } from "@/components/admin/TripAdminClient";
+import { AdminSeatPanel, DriverLinkBox, DuplicateForm, FlagToggle, RemoveBookingButton, ShareBox, type AdminBooking } from "@/components/admin/TripAdminClient";
 import { GenderIcon } from "@/components/SeatMap";
-import { DIRECTION_LABEL, displayPhone, formatDate, formatTime } from "@/lib/format";
-import { findSeat, seatStats } from "@/lib/layout";
+import { DIRECTION_LABEL, displayPhone, formatDate, formatFare, formatTime } from "@/lib/format";
+import { fareRange, findSeat, seatStats } from "@/lib/layout";
 import { closedReason, loadTrip, takenSeats } from "@/lib/trips";
 import { siteUrl } from "@/lib/url";
 import { deleteTrip, setTripStatus } from "../../../actions";
@@ -26,7 +26,10 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
   if (!data) notFound();
   const { trip, stops, bookings } = data;
   const toHome = trip.direction === "to_home";
-  const url = `${siteUrl(await headers())}/t/${trip.slug}`;
+  const base = siteUrl(await headers());
+  const url = `${base}/t/${trip.slug}`;
+  const driverUrl = `${base}/d/${trip.driverToken}`;
+  const fares = fareRange(trip.layout, trip.fare);
   const closed = closedReason(trip);
   const stats = seatStats(trip.layout, takenSeats(bookings));
 
@@ -38,7 +41,13 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
     phone: b.phone,
     gender: b.gender,
     stopId: b.stopId,
+    fare: b.fare,
+    boarded: b.boarded,
+    paid: b.paid,
   }));
+  const expected = rows.reduce((sum, r) => sum + (r.fare ?? 0), 0);
+  const collected = rows.reduce((sum, r) => sum + (r.paid ? (r.fare ?? 0) : 0), 0);
+  const hasFares = rows.some((r) => r.fare !== null);
   const byStop = stops.map((st) => ({
     stop: st,
     passengers: rows.filter((r) => r.stopId === st.id).sort((a, b) => Number(a.seatLabel) - Number(b.seatLabel)),
@@ -52,6 +61,7 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
     "",
     `${stopWord} points:`,
     ...stops.map((s) => `• ${s.name}: ${formatTime(s.time)}`),
+    fares ? `\n💵 Fare: ${fares.min === fares.max ? formatFare(fares.min) : `${formatFare(fares.min)} to ${formatFare(fares.max)}`} per seat` : null,
     trip.notes ? `\n${trip.notes}` : null,
     "",
     `Book your seat 👉 ${url}`,
@@ -63,7 +73,7 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
     `*${trip.title}*: ${formatDate(trip.date)}`,
     ...byStop
       .filter((g) => g.passengers.length)
-      .flatMap((g) => ["", `📍 ${g.stop.name} (${formatTime(g.stop.time)})`, ...g.passengers.map((p) => `  Seat ${p.seatLabel}: ${p.name}, ${displayPhone(p.phone)}`)]),
+      .flatMap((g) => ["", `📍 ${g.stop.name} (${formatTime(g.stop.time)})`, ...g.passengers.map((p) => `  Seat ${p.seatLabel}: ${p.name}, ${displayPhone(p.phone)}${p.fare !== null ? `, ${formatFare(p.fare)}` : ""}`)]),
   ].join("\n");
 
   const females = bookings.filter((b) => b.gender === "female").length;
@@ -87,6 +97,7 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
           <h1 className="mt-1 text-2xl font-bold">{trip.title}</h1>
           <p className="text-sm text-slate-500">
             {trip.vehicleName}
+            {fares && ` · ${fares.min === fares.max ? formatFare(fares.min) : `${formatFare(fares.min)}–${formatFare(fares.max)}`} per seat`}
             {trip.closesAt && ` · booking stops ${formatDate(trip.closesAt.slice(0, 10))} ${formatTime(trip.closesAt.slice(11))}`}
           </p>
         </div>
@@ -115,10 +126,20 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
         <Stat label="Female / male" value={`${females} / ${bookings.length - females}`} />
         <Stat label="Free for females" value={stats.freeFor.female} tone="text-female" />
         <Stat label="Free for males" value={stats.freeFor.male} tone="text-male" />
+        {hasFares && (
+          <>
+            <Stat label="Fares expected" value={formatFare(expected)} />
+            <Stat label="Collected" value={formatFare(collected)} tone="text-emerald-700" />
+            <Stat label="Still to collect" value={formatFare(expected - collected)} />
+          </>
+        )}
+        <Stat label="Boarded" value={`${rows.filter((r) => r.boarded).length}/${rows.length}`} />
       </div>
 
       <div className="space-y-5">
         <ShareBox url={url} message={message} />
+
+        <DriverLinkBox tripId={id} url={driverUrl} title={trip.title} />
 
         <AdminSeatPanel tripId={id} layout={trip.layout} bookings={rows} stops={stops.map((s) => ({ id: s.id, name: s.name, time: s.time }))} toHome={toHome} />
 
@@ -142,6 +163,9 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
                       <span className="w-12 font-semibold text-slate-500">#{p.seatLabel}</span>
                       <GenderIcon gender={p.gender} className={`size-4 shrink-0 ${p.gender === "female" ? "text-female" : "text-male"}`} />
                       <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                      {p.fare !== null && <span className="hidden text-slate-500 sm:inline">{formatFare(p.fare)}</span>}
+                      <FlagToggle tripId={id} booking={p} field="boarded" label={toHome ? "Dropped" : "Boarded"} />
+                      <FlagToggle tripId={id} booking={p} field="paid" label="Paid" />
                       <a href={`tel:+${p.phone}`} className="hidden text-slate-600 hover:text-ink sm:inline">
                         {displayPhone(p.phone)}
                       </a>

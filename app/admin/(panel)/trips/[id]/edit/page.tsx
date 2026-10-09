@@ -28,6 +28,7 @@ export default async function EditTripPage({ params }: PageProps<"/admin/trips/[
           departTime: trip.departTime ?? "",
           closesAt: trip.closesAt ?? "",
           notes: trip.notes ?? "",
+          fare: trip.fare === null ? "" : String(trip.fare),
           stops: stops.map((s) => ({ id: s.id, name: s.name, time: s.time })),
         }}
       />

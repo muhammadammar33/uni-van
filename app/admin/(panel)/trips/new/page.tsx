@@ -19,7 +19,7 @@ export default async function NewTripPage() {
           action={createTrip}
           submitLabel="Create trip"
           vehicles={vehicles.map((v) => ({ id: v.id, name: v.name, seats: seatList(v.layout).length }))}
-          initial={{ title: "", direction: "to_uni", date: todayLocal(), departTime: "", closesAt: "", notes: "", stops: [] }}
+          initial={{ title: "", direction: "to_uni", date: todayLocal(), departTime: "", closesAt: "", notes: "", fare: "", stops: [] }}
         />
       )}
     </>

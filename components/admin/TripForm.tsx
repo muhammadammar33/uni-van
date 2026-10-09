@@ -14,6 +14,8 @@ export type TripFormValues = {
   departTime: string;
   closesAt: string;
   notes: string;
+  /** Rupees as typed; "" = no fare */
+  fare: string;
   stops: { id?: number; name: string; time: string }[];
 };
 
@@ -88,6 +90,13 @@ export function TripForm({
             Title <span className="font-normal text-slate-400">(optional)</span>
           </label>
           <input id="title" name="title" className="input" defaultValue={initial.title} placeholder={date ? defaultTitle(direction, date) : "Van to university"} maxLength={100} />
+        </div>
+        <div>
+          <label className="label" htmlFor="fare">
+            Fare per seat (Rs.) <span className="font-normal text-slate-400">(optional)</span>
+          </label>
+          <input id="fare" name="fare" type="number" inputMode="numeric" min={0} step={1} className="input sm:!w-48" defaultValue={initial.fare} placeholder="e.g. 300" />
+          <p className="mt-1 text-xs text-slate-500">Students see it before booking. Give single seats a different price under Seating.</p>
         </div>
         {vehicles && (
           <div>
