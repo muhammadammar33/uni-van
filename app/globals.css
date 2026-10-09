@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #0f766e;
+  --color-brand-dk: #115e59;
+  --color-brand-lt: #ccfbf1;
+  --color-male: #0369a1;
+  --color-male-lt: #e0f2fe;
+  --color-female: #be185d;
+  --color-female-lt: #fce7f3;
+  --color-ink: #0f172a;
+  --color-mist: #f1f5f9;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body {
+  color: var(--color-ink);
+  background: var(--color-mist);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Seats nobody can pick: diagonal stripes. */
+.seat-blocked {
+  background-image: repeating-linear-gradient(135deg, rgb(148 163 184 / 0.25) 0 4px, transparent 4px 8px);
+}
+
+@utility input {
+  @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 sm:text-sm;
+}
+@utility label {
+  @apply mb-1 block text-sm font-medium text-slate-700;
+}
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-brand text-white hover:bg-brand-dk;
+}
+@utility btn-ghost {
+  @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+}
+@utility btn-danger {
+  @apply btn border border-red-200 bg-white text-red-700 hover:bg-red-50;
+}
+@utility card {
+  @apply rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6;
+}
