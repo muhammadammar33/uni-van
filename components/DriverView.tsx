@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Banknote, Bus, CalendarDays, Check, Clock, MapPin, MessageCircle, Phone, UserCheck } from "lucide-react";
 import { GenderIcon } from "@/components/SeatMap";
 import { DIRECTION_LABEL, displayPhone, formatDate, formatFare, formatTime } from "@/lib/format";
@@ -16,10 +16,16 @@ export function DriverView({ token, initial }: { token: string; initial: DriverT
   /** Taps not yet confirmed by the server; they win over polled data so the screen doesn't flicker back. */
   const [pending, setPending] = useState<Record<string, boolean>>({});
 
+  /** Saves in flight, and when the last one finished: a refresh that started before then is out of date. */
+  const saving = useRef(0);
+  const lastSaved = useRef(0);
+
   const refresh = useCallback(async () => {
+    const started = Date.now();
     try {
       const res = await fetch(`/api/d/${token}`, { cache: "no-store" });
-      if (res.ok) setTrip(await res.json());
+      // Don't let an older list undo a tick that was just saved (or is being saved).
+      if (res.ok && saving.current === 0 && started > lastSaved.current) setTrip(await res.json());
     } catch {
       /* no signal on the road: keep the last list */
     }
@@ -42,6 +48,7 @@ export function DriverView({ token, initial }: { token: string; initial: DriverT
     const next = !value(p, field);
     setPending((m) => ({ ...m, [key]: next }));
     setError(null);
+    saving.current++;
     try {
       const res = await fetch(`/api/d/${token}/mark`, {
         method: "POST",
@@ -56,6 +63,8 @@ export function DriverView({ token, initial }: { token: string; initial: DriverT
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      saving.current--;
+      lastSaved.current = Date.now();
       setPending((m) => {
         const { [key]: _done, ...rest } = m; // eslint-disable-line @typescript-eslint/no-unused-vars
         return rest;
@@ -166,9 +175,10 @@ export function DriverView({ token, initial }: { token: string; initial: DriverT
                       </a>
                     </div>
                     <div className="mt-2.5 grid grid-cols-2 gap-2">
-                      <Toggle on={value(p, "boarded")} onClick={() => toggle(p, "boarded")} icon={<UserCheck className="size-4" />} label={toHome ? "Dropped" : "Boarded"} />
+                      <Toggle on={value(p, "boarded")} saving={`${p.id}:boarded` in pending} onClick={() => toggle(p, "boarded")} icon={<UserCheck className="size-4" />} label={toHome ? "Dropped" : "Boarded"} />
                       <Toggle
                         on={value(p, "paid")}
+                        saving={`${p.id}:paid` in pending}
                         onClick={() => toggle(p, "paid")}
                         icon={<Banknote className="size-4" />}
                         label={p.fare !== null ? `Paid ${formatFare(p.fare)}` : "Paid"}
@@ -196,15 +206,17 @@ function Total({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function Toggle({ on, onClick, icon, label }: { on: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+function Toggle({ on, saving, onClick, icon, label }: { on: boolean; saving: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={on}
+      aria-busy={saving}
+      title={saving ? "Saving…" : undefined}
       className={`flex items-center justify-center gap-1.5 rounded-lg border-2 py-2 text-sm font-semibold transition ${
         on ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-600"
-      }`}
+      } ${saving ? "animate-pulse" : ""}`}
     >
       {on ? <Check className="size-4" /> : icon}
       {label}
