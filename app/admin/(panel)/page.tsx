@@ -87,9 +87,9 @@ export default async function TripsPage() {
       </div>
 
       <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Upcoming trips" value={upcoming.length} />
+        <Stat label="Upcoming" value={upcoming.length} />
         <Stat label="Seats booked" value={`${booked}/${seats}`} bar={seats ? booked / seats : 0} />
-        <Stat label="Fares expected" value={formatFare(expected)} />
+        <Stat label="Fares due" value={formatFare(expected)} />
         <Stat label="Collected" value={formatFare(collected)} tone="text-emerald-700" bar={expected ? collected / expected : 0} />
       </div>
 
