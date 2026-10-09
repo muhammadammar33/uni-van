@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { keepFields } from "@/lib/keepFields";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import type { FormState } from "@/app/admin/actions";
 import { defaultTitle } from "@/lib/format";
@@ -51,7 +52,7 @@ export function TripForm({
     });
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form onSubmit={keepFields(formAction)} className="space-y-5">
       <input type="hidden" name="stops" value={JSON.stringify(stops.map(({ id, name, time }) => ({ id, name, time })))} />
 
       <section className="card space-y-4">

@@ -1,12 +1,13 @@
 "use client";
 
 import { useActionState } from "react";
+import { keepFields } from "@/lib/keepFields";
 import { login } from "../actions";
 
 export function LoginForm({ next }: { next: string }) {
   const [state, action, pending] = useActionState(login, undefined);
   return (
-    <form action={action} className="space-y-4">
+    <form onSubmit={keepFields(action)} className="space-y-4">
       <input type="hidden" name="next" value={next} />
       <div>
         <label className="label" htmlFor="email">

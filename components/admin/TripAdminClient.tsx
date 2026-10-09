@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
+import { keepFields } from "@/lib/keepFields";
 import { Armchair, Banknote, MessageCircle, Users, Phone, RefreshCw, Send, Trash2, UserCheck, X } from "lucide-react";
 import { adminBook, duplicateTrip, removeBooking, resetDriverLink, setBookingFlag, type FormState } from "@/app/admin/actions";
 import { CopyButton } from "@/components/admin/CopyButton";
@@ -198,7 +199,7 @@ function AdminBookForm({
   }, undefined);
   if (!allowed.length) return <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Seat {seatLabel} can&apos;t be used: it sits between a male and a female passenger.</p>;
   return (
-    <form action={action} className="space-y-3 rounded-xl border border-slate-200 p-4">
+    <form onSubmit={keepFields(action)} className="space-y-3 rounded-xl border border-slate-200 p-4">
       <h3 className="font-semibold">Book seat {seatLabel} for someone</h3>
       <input name="name" required placeholder="Name" className="input" />
       <input name="phone" required type="tel" placeholder="Phone, e.g. 0300 1234567" className="input" />
@@ -246,7 +247,7 @@ export function RemoveBookingButton({ tripId, bookingId, name }: { tripId: numbe
 export function DuplicateForm({ tripId, nextDate, returnLabel }: { tripId: number; nextDate: string; returnLabel: string }) {
   const [state, action, pending] = useActionState(duplicateTrip.bind(null, tripId), undefined);
   return (
-    <form action={action} className="card space-y-3">
+    <form onSubmit={keepFields(action)} className="card space-y-3">
       <h2 className="font-semibold">Copy this trip</h2>
       <p className="text-sm text-slate-500">Same stops, seating and note, on another date. Passengers are not copied.</p>
       <input name="date" type="date" required defaultValue={nextDate} className="input" aria-label="Date of the copy" />
