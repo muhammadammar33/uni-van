@@ -19,7 +19,7 @@ export default async function TripSeatsPage({ params }: PageProps<"/admin/trips/
       <Link href={`/admin/trips/${id}`} className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-ink">
         <ArrowLeft className="size-4" /> Back to trip
       </Link>
-      <h1 className="mb-1 text-2xl font-bold">Seating for this trip</h1>
+      <h1 className="mb-1 text-2xl font-extrabold tracking-tight sm:text-3xl">Seating for this trip</h1>
       <p className="mb-5 text-sm text-slate-600">
         Changes here apply to <b>{data.trip.title}</b> only. To change the plan for future trips, edit the vehicle under Vehicles.
       </p>

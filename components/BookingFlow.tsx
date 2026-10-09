@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bus, CalendarDays, CircleAlert, Clock, MapPin, Ticket, X } from "lucide-react";
+import { Bus, CalendarDays, Check, CircleAlert, CircleCheckBig, Clock, MapPin, Share2, X } from "lucide-react";
 import { GenderIcon, SeatLegend, SeatMap, type SeatState } from "@/components/SeatMap";
 import { DIRECTION_LABEL, formatDate, formatFare, formatTime, normalizePhone, displayPhone } from "@/lib/format";
 import { checkSeat, fareRange, findSeat, seatFare, seatStats, type Gender } from "@/lib/layout";
@@ -158,31 +158,56 @@ export function BookingFlow({ slug, initial }: { slug: string; initial: PublicTr
     }
   }
 
+  const stepDone = { gender: !!gender, stop: !!selectedStop, seat: !!selected, details: profile.name.trim().length >= 2 && phoneOk };
+
   return (
-    <main className="mx-auto max-w-lg px-4 pb-40 pt-5">
-      <header className="mb-5">
-        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-brand">
-          <Bus className="size-4" /> {DIRECTION_LABEL[trip.direction]}
-        </div>
-        <h1 className="text-2xl font-bold leading-tight">{trip.title}</h1>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
-          <span className="flex items-center gap-1.5">
-            <CalendarDays className="size-4" /> {formatDate(trip.date, true)}
-          </span>
-          {trip.departTime && (
-            <span className="flex items-center gap-1.5">
-              <Clock className="size-4" /> {toHome ? "Leaves university" : "Departs"} {formatTime(trip.departTime)}
+    <div className="min-h-dvh pb-40">
+      <header className="bg-hero relative overflow-hidden px-4 pb-14 pt-6 text-white">
+        <div className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:radial-gradient(white_1px,transparent_1px)] [background-size:22px_22px]" />
+        <div className="relative mx-auto max-w-lg animate-rise">
+          <div className="flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-teal-50 ring-1 ring-white/20">
+              <Bus className="size-3.5" /> {DIRECTION_LABEL[trip.direction]}
             </span>
-          )}
-          <span>{trip.vehicleName}</span>
+            {!trip.closed && (
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-teal-100">
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-300 opacity-75" />
+                  <span className="relative inline-flex size-2 rounded-full bg-emerald-300" />
+                </span>
+                {stats.free} seats left
+              </span>
+            )}
+          </div>
+          <h1 className="mt-3 text-[1.7rem] font-extrabold leading-tight tracking-tight">{trip.title}</h1>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-teal-50/90">
+            <span className="flex items-center gap-1.5">
+              <CalendarDays className="size-4" /> {formatDate(trip.date, true)}
+            </span>
+            {trip.departTime && (
+              <span className="flex items-center gap-1.5">
+                <Clock className="size-4" /> {toHome ? "Leaves university" : "Departs"} {formatTime(trip.departTime)}
+              </span>
+            )}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2 text-sm">
+            {fares && (
+              <span className="rounded-full bg-accent px-3 py-1 font-bold text-ink">
+                {fares.min === fares.max ? `${formatFare(fares.min)} per seat` : `${formatFare(fares.min)} – ${formatFare(fares.max)}`}
+              </span>
+            )}
+            <span className="rounded-full bg-white/10 px-3 py-1 font-medium ring-1 ring-white/20">{trip.vehicleName}</span>
+          </div>
         </div>
-        {fares && (
-          <p className="mt-2 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-800">
-            {fares.min === fares.max ? `${formatFare(fares.min)} per seat` : `${formatFare(fares.min)} to ${formatFare(fares.max)} per seat`}
-          </p>
-        )}
-        {trip.notes && <p className="mt-3 whitespace-pre-line rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{trip.notes}</p>}
       </header>
+
+      <main className="relative mx-auto -mt-8 max-w-lg px-4">
+      {trip.notes && (
+        <p className="mb-4 flex gap-2 whitespace-pre-line rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-sm text-amber-900 shadow-soft">
+          <span aria-hidden>📢</span>
+          {trip.notes}
+        </p>
+      )}
 
       {error && (
         <div role="alert" className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -195,7 +220,7 @@ export function BookingFlow({ slug, initial }: { slug: string; initial: PublicTr
       )}
 
       {booking ? (
-        <BookingTicket booking={booking} toHome={toHome} onCancel={trip.closed ? null : cancel} busy={busy} />
+        <BookingTicket booking={booking} trip={trip} onCancel={trip.closed ? null : cancel} busy={busy} />
       ) : trip.closed ? (
         <div className="card mb-5 text-center">
           <p className="font-semibold">{trip.closed}</p>
@@ -203,7 +228,7 @@ export function BookingFlow({ slug, initial }: { slug: string; initial: PublicTr
         </div>
       ) : (
         <>
-          <Step n={1} title="You are">
+          <Step n={1} done={stepDone.gender} title="You are">
             <div className="grid grid-cols-2 gap-3">
               {(["female", "male"] as const).map((g) => (
                 <button
@@ -228,38 +253,52 @@ export function BookingFlow({ slug, initial }: { slug: string; initial: PublicTr
             </div>
           </Step>
 
-          <Step n={2} title={`Your ${stopWord} point`}>
-            <div className="space-y-2">
-              {trip.stops.map((s) => (
-                <label
-                  key={s.id}
-                  className={[
-                    "flex cursor-pointer items-center gap-3 rounded-xl border-2 bg-white px-3 py-3 transition",
-                    stopId === s.id ? "border-brand bg-brand-lt/40" : "border-slate-200 hover:border-slate-300",
-                  ].join(" ")}
-                >
-                  <input type="radio" name="stop" className="accent-brand" checked={stopId === s.id} onChange={() => setStopId(s.id)} />
-                  <MapPin className="size-4 shrink-0 text-slate-400" />
-                  <span className="flex-1 font-medium">{s.name}</span>
-                  <span className="text-sm font-semibold text-slate-700">{formatTime(s.time)}</span>
-                </label>
-              ))}
+          <Step n={2} done={stepDone.stop} title={`Your ${stopWord} point`}>
+            <ol className="relative">
+              {trip.stops.map((s, i) => {
+                const on = stopId === s.id;
+                return (
+                  <li key={s.id} className="relative pb-2 pl-7 last:pb-0">
+                    {i < trip.stops.length - 1 && <span className="absolute left-[9px] top-6 h-full w-0.5 bg-slate-200" aria-hidden />}
+                    <span
+                      className={`absolute left-0 top-3.5 grid size-5 place-items-center rounded-full border-2 transition ${
+                        on ? "border-brand bg-brand" : "border-slate-300 bg-white"
+                      }`}
+                      aria-hidden
+                    >
+                      {on && <span className="size-1.5 rounded-full bg-white" />}
+                    </span>
+                    <label
+                      className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 px-3 py-2.5 transition ${
+                        on ? "border-brand bg-brand-lt/40 shadow-sm" : "border-transparent hover:bg-slate-50"
+                      }`}
+                    >
+                      <input type="radio" name="stop" className="sr-only" checked={on} onChange={() => setStopId(s.id)} />
+                      <span className="flex-1 font-semibold">{s.name}</span>
+                      <span className={`rounded-lg px-2 py-0.5 text-sm font-bold tabular-nums ${on ? "bg-brand text-white" : "bg-slate-100 text-slate-700"}`}>
+                        {formatTime(s.time)}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
               {trip.stops.length === 0 && <p className="text-sm text-slate-500">The admin hasn&apos;t added any stops yet.</p>}
-            </div>
+            </ol>
             {selectedStop && (
-              <p className="mt-2 text-sm text-slate-600">
-                {toHome ? "Expected drop-off" : "Be at the stop by"} <b>{formatTime(selectedStop.time)}</b>.
+              <p className="mt-3 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                <Clock className="size-4 text-brand" />
+                {toHome ? "Expected drop-off at" : "Be at the stop by"} <b className="text-ink">{formatTime(selectedStop.time)}</b>
               </p>
             )}
           </Step>
         </>
       )}
 
-      <Step n={booking || trip.closed ? undefined : 3} title={booking ? "Seat map" : trip.closed ? "Seats" : "Pick your seat"}>
+      <Step n={booking || trip.closed ? undefined : 3} done={stepDone.seat} title={booking ? "Seat map" : trip.closed ? "Seats" : "Pick your seat"}>
         {!booking && !trip.closed && !gender && <p className="mb-3 text-sm text-slate-500">Choose female or male above to see the seats you can take.</p>}
         <SeatMap layout={trip.layout} seatState={seatState} onSelect={booking || trip.closed || !gender ? undefined : setSeat} />
         <div className="mt-4">
-          <SeatLegend items={["female", "male", "any", "selected", "takenF", "takenM", "blocked"]} />
+          <SeatLegend items={booking || trip.closed ? ["female", "male", "any", "selected", "takenF", "takenM"] : ["female", "male", "any", "selected", "takenF", "takenM", "blocked"]} />
         </div>
         <p className="mt-3 text-center text-xs text-slate-500">
           {stats.free} of {stats.total} seats free. Males and females can&apos;t sit side by side. Seats across the aisle are fine.
@@ -267,7 +306,7 @@ export function BookingFlow({ slug, initial }: { slug: string; initial: PublicTr
       </Step>
 
       {!booking && !trip.closed && (
-        <Step n={4} title="Your details">
+        <Step n={4} done={stepDone.details} title="Your details">
           <div className="space-y-3">
             <div>
               <label className="label" htmlFor="name">
@@ -338,15 +377,23 @@ export function BookingFlow({ slug, initial }: { slug: string; initial: PublicTr
           </div>
         </div>
       )}
-    </main>
+      </main>
+    </div>
   );
 }
 
-function Step({ n, title, children }: { n?: number; title: string; children: React.ReactNode }) {
+function Step({ n, done, title, children }: { n?: number; done?: boolean; title: string; children: React.ReactNode }) {
   return (
-    <section className="card mb-4">
-      <h2 className="mb-3 flex items-center gap-2 font-semibold">
-        {n && <span className="grid size-6 place-items-center rounded-full bg-brand text-xs text-white">{n}</span>}
+    <section className="card mb-4 animate-rise">
+      <h2 className="mb-3 flex items-center gap-2.5 text-[15px] font-bold">
+        {n &&
+          (done ? (
+            <span className="grid size-7 animate-pop place-items-center rounded-full bg-emerald-500 text-white">
+              <Check className="size-4" strokeWidth={3} />
+            </span>
+          ) : (
+            <span className="grid size-7 place-items-center rounded-full bg-brand-lt text-xs font-extrabold text-brand-dk">{n}</span>
+          ))}
         {title}
       </h2>
       {children}
@@ -354,44 +401,89 @@ function Step({ n, title, children }: { n?: number; title: string; children: Rea
   );
 }
 
-function BookingTicket({ booking, toHome, onCancel, busy }: { booking: BookingView; toHome: boolean; onCancel: (() => void) | null; busy: boolean }) {
+function BookingTicket({
+  booking,
+  trip,
+  onCancel,
+  busy,
+}: {
+  booking: BookingView;
+  trip: PublicTrip;
+  onCancel: (() => void) | null;
+  busy: boolean;
+}) {
+  const toHome = trip.direction === "to_home";
+  const shareText = `🚐 I booked seat ${booking.seatLabel} on "${trip.title}" (${formatDate(trip.date)}). ${toHome ? "Drop-off" : "Pickup"}: ${booking.stop}, ${formatTime(booking.time)}. Booking code ${booking.code}.`;
+  const share = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ text: shareText });
+        return;
+      } catch {
+        /* closed the share sheet */
+        return;
+      }
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank");
+  };
   return (
-    <section className="mb-4 overflow-hidden rounded-2xl border-2 border-brand bg-white shadow-sm">
-      <div className="flex items-center gap-2 bg-brand px-4 py-3 font-semibold text-white">
-        <Ticket className="size-5" /> Your seat is booked
-      </div>
-      <dl className="grid grid-cols-2 gap-4 p-4">
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-slate-500">Seat</dt>
-          <dd className="text-3xl font-bold">{booking.seatLabel}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-slate-500">Booking code</dt>
-          <dd className="font-mono text-3xl font-bold tracking-widest">{booking.code}</dd>
-        </div>
-        <div className="col-span-2">
-          <dt className="text-xs uppercase tracking-wide text-slate-500">{toHome ? "Drop-off" : "Pickup"}</dt>
-          <dd className="font-semibold">
-            {booking.stop} · {formatTime(booking.time)}
-          </dd>
-        </div>
-        {booking.fare !== null && (
-          <div className="col-span-2">
-            <dt className="text-xs uppercase tracking-wide text-slate-500">Fare</dt>
-            <dd className="font-semibold">{formatFare(booking.fare)}</dd>
+    <section className="mb-4 animate-rise">
+      <div className="relative overflow-hidden rounded-3xl bg-white shadow-lift">
+        <div className="bg-hero px-5 pb-5 pt-4 text-white">
+          <div className="flex items-center gap-3">
+            <CircleCheckBig className="size-10 shrink-0 animate-pop text-emerald-300" />
+            <div>
+              <div className="text-lg font-extrabold">You&apos;re booked!</div>
+              <div className="text-sm text-teal-50/90">
+                {formatDate(trip.date)} · {DIRECTION_LABEL[trip.direction]}
+              </div>
+            </div>
           </div>
-        )}
-        <div className="col-span-2 text-sm text-slate-600">
-          {booking.name} · {displayPhone(booking.phone)}
         </div>
-      </dl>
-      <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-3">
-        <p className="text-xs text-slate-500">Keep your code to change or cancel later.</p>
-        {onCancel && (
-          <button className="btn-danger shrink-0" onClick={onCancel} disabled={busy}>
-            Cancel booking
+        <dl className="grid grid-cols-2 gap-4 px-5 py-5">
+          <div>
+            <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Seat</dt>
+            <dd className="text-4xl font-extrabold leading-none">{booking.seatLabel}</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Booking code</dt>
+            <dd className="font-mono text-3xl font-bold tracking-[0.2em] text-brand">{booking.code}</dd>
+          </div>
+          <div className="col-span-2">
+            <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{toHome ? "Drop-off" : "Pickup"}</dt>
+            <dd className="flex items-center gap-1.5 font-bold">
+              <MapPin className="size-4 text-brand" /> {booking.stop} · {formatTime(booking.time)}
+            </dd>
+          </div>
+          {booking.fare !== null && (
+            <div>
+              <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Fare</dt>
+              <dd className="font-bold">{formatFare(booking.fare)}</dd>
+            </div>
+          )}
+          <div className={booking.fare !== null ? "" : "col-span-2"}>
+            <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Passenger</dt>
+            <dd className="truncate font-semibold">{booking.name}</dd>
+            <dd className="text-sm text-slate-500">{displayPhone(booking.phone)}</dd>
+          </div>
+        </dl>
+        {/* Perforation */}
+        <div className="relative flex items-center" aria-hidden>
+          <span className="absolute -left-3 size-6 rounded-full bg-mist" />
+          <span className="mx-5 w-full border-t-2 border-dashed border-slate-200" />
+          <span className="absolute -right-3 size-6 rounded-full bg-mist" />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 px-5 py-4">
+          <button className="btn-primary flex-1" onClick={share}>
+            <Share2 className="size-4" /> Share
           </button>
-        )}
+          {onCancel && (
+            <button className="btn-ghost flex-1 !text-red-600" onClick={onCancel} disabled={busy}>
+              Cancel booking
+            </button>
+          )}
+          <p className="w-full text-center text-xs text-slate-500">Take a screenshot or keep your code to check or cancel later.</p>
+        </div>
       </div>
     </section>
   );

@@ -9,6 +9,7 @@ import { GenderIcon } from "@/components/SeatMap";
 import { DIRECTION_LABEL, displayPhone, formatDate, formatFare, formatTime } from "@/lib/format";
 import { fareRange, findSeat, seatStats } from "@/lib/layout";
 import { closedReason, loadTrip, takenSeats } from "@/lib/trips";
+import { tripShareMessage } from "@/lib/share";
 import { siteUrl } from "@/lib/url";
 import { deleteTrip, setTripStatus } from "../../../actions";
 
@@ -54,20 +55,7 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
   }));
 
   const stopWord = toHome ? "Drop-off" : "Pickup";
-  const message = [
-    `🚐 *${trip.title}*`,
-    `📅 ${formatDate(trip.date, true)} · ${DIRECTION_LABEL[trip.direction]}`,
-    trip.departTime ? `🕒 ${toHome ? "Leaves university at" : "Departs at"} ${formatTime(trip.departTime)}` : null,
-    "",
-    `${stopWord} points:`,
-    ...stops.map((s) => `• ${s.name}: ${formatTime(s.time)}`),
-    fares ? `\n💵 Fare: ${fares.min === fares.max ? formatFare(fares.min) : `${formatFare(fares.min)} to ${formatFare(fares.max)}`} per seat` : null,
-    trip.notes ? `\n${trip.notes}` : null,
-    "",
-    `Book your seat 👉 ${url}`,
-  ]
-    .filter((l) => l !== null)
-    .join("\n");
+  const message = tripShareMessage(trip, stops, url);
 
   const passengerList = [
     `*${trip.title}*: ${formatDate(trip.date)}`,
@@ -84,21 +72,27 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
         <ArrowLeft className="size-4" /> Trips
       </Link>
 
-      <div className="mb-5 flex flex-wrap items-start gap-3">
+      <div className="mb-6 flex flex-wrap items-start gap-4">
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-            <span className={toHome ? "text-amber-700" : "text-brand"}>{DIRECTION_LABEL[trip.direction]}</span>
-            <span className="text-slate-400">·</span>
-            <span className="text-slate-600">{formatDate(trip.date, true)}</span>
-            <span className={`rounded-full px-2 py-0.5 text-xs ${closed ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-800"}`}>
-              {closed ? "Closed" : "Open for booking"}
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                toHome ? "bg-amber-100 text-amber-800" : "bg-brand-lt text-brand-dk"
+              }`}
+            >
+              {DIRECTION_LABEL[trip.direction]}
+            </span>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${closed ? "bg-slate-200 text-slate-600" : "bg-emerald-100 text-emerald-800"}`}>
+              {closed ? "● Closed" : "● Open for booking"}
             </span>
           </div>
-          <h1 className="mt-1 text-2xl font-bold">{trip.title}</h1>
-          <p className="text-sm text-slate-500">
-            {trip.vehicleName}
-            {fares && ` · ${fares.min === fares.max ? formatFare(fares.min) : `${formatFare(fares.min)}–${formatFare(fares.max)}`} per seat`}
-            {trip.closesAt && ` · booking stops ${formatDate(trip.closesAt.slice(0, 10))} ${formatTime(trip.closesAt.slice(11))}`}
+          <h1 className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">{trip.title}</h1>
+          <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-500">
+            <span className="font-semibold text-slate-700">{formatDate(trip.date, true)}</span>
+            {trip.departTime && <span>Departs {formatTime(trip.departTime)}</span>}
+            <span>{trip.vehicleName}</span>
+            {fares && <span>{fares.min === fares.max ? formatFare(fares.min) : `${formatFare(fares.min)}–${formatFare(fares.max)}`} per seat</span>}
+            {trip.closesAt && <span>Booking stops {formatDate(trip.closesAt.slice(0, 10))} {formatTime(trip.closesAt.slice(11))}</span>}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -113,7 +107,7 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
               <Lock className="size-4" /> Close booking
             </ConfirmButton>
           ) : (
-            <ConfirmButton action={setTripStatus.bind(null, id, "open")} className="btn-ghost">
+            <ConfirmButton action={setTripStatus.bind(null, id, "open")} className="btn-primary">
               <LockOpen className="size-4" /> Reopen
             </ConfirmButton>
           )}
@@ -121,25 +115,63 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
       </div>
       {closed && trip.status === "open" && <p className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{closed} Edit the date or closing time to reopen it.</p>}
 
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Booked" value={`${bookings.length}/${stats.total}`} />
-        <Stat label="Female / male" value={`${females} / ${bookings.length - females}`} />
-        <Stat label="Free for females" value={stats.freeFor.female} tone="text-female" />
-        <Stat label="Free for males" value={stats.freeFor.male} tone="text-male" />
-        {hasFares && (
-          <>
-            <Stat label="Fares expected" value={formatFare(expected)} />
-            <Stat label="Collected" value={formatFare(collected)} tone="text-emerald-700" />
-            <Stat label="Still to collect" value={formatFare(expected - collected)} />
-          </>
-        )}
-        <Stat label="Boarded" value={`${rows.filter((r) => r.boarded).length}/${rows.length}`} />
+      <div className="mb-5 grid gap-3 md:grid-cols-3">
+        <div className="card !p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Seats booked</div>
+          <div className="mt-1 text-3xl font-extrabold tracking-tight">
+            {bookings.length}
+            <span className="text-lg text-slate-400">/{stats.total}</span>
+          </div>
+          <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="bg-female/70" style={{ width: `${(females / Math.max(stats.total, 1)) * 100}%` }} />
+            <div className="bg-male/70" style={{ width: `${((bookings.length - females) / Math.max(stats.total, 1)) * 100}%` }} />
+          </div>
+          <div className="mt-2 flex justify-between text-xs text-slate-500">
+            <span>
+              <b className="text-female">{females}</b> female · <b className="text-male">{bookings.length - females}</b> male
+            </span>
+            <span>
+              free: <b className="text-female">{stats.freeFor.female}</b> F · <b className="text-male">{stats.freeFor.male}</b> M
+            </span>
+          </div>
+        </div>
+        <div className="card !p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fares collected</div>
+          {hasFares ? (
+            <>
+              <div className="mt-1 text-3xl font-extrabold tracking-tight text-emerald-700">
+                {formatFare(collected)}
+                <span className="text-lg text-slate-400"> / {expected.toLocaleString("en-US")}</span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full bg-emerald-500" style={{ width: `${(collected / Math.max(expected, 1)) * 100}%` }} />
+              </div>
+              <div className="mt-2 text-xs text-slate-500">{formatFare(expected - collected)} still to collect</div>
+            </>
+          ) : (
+            <div className="mt-2 text-sm text-slate-500">
+              No fare set. <Link href={`/admin/trips/${id}/edit`} className="font-semibold text-brand hover:underline">Add one</Link>
+            </div>
+          )}
+        </div>
+        <div className="card !p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{toHome ? "Dropped off" : "Boarded"}</div>
+          <div className="mt-1 text-3xl font-extrabold tracking-tight">
+            {rows.filter((r) => r.boarded).length}
+            <span className="text-lg text-slate-400">/{rows.length}</span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full bg-brand" style={{ width: `${(rows.filter((r) => r.boarded).length / Math.max(rows.length, 1)) * 100}%` }} />
+          </div>
+          <div className="mt-2 text-xs text-slate-500">Ticked by the driver from their link</div>
+        </div>
       </div>
 
       <div className="space-y-5">
-        <ShareBox url={url} message={message} />
-
-        <DriverLinkBox tripId={id} url={driverUrl} title={trip.title} />
+        <div className="grid gap-5 lg:grid-cols-2">
+          <ShareBox url={url} message={message} />
+          <DriverLinkBox tripId={id} url={driverUrl} title={trip.title} />
+        </div>
 
         <AdminSeatPanel tripId={id} layout={trip.layout} bookings={rows} stops={stops.map((s) => ({ id: s.id, name: s.name, time: s.time }))} toHome={toHome} />
 
@@ -193,14 +225,5 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
         </div>
       </div>
     </>
-  );
-}
-
-function Stat({ label, value, tone = "" }: { label: string; value: React.ReactNode; tone?: string }) {
-  return (
-    <div className="card !p-3">
-      <div className={`text-xl font-bold ${tone}`}>{value}</div>
-      <div className="text-xs text-slate-500">{label}</div>
-    </div>
   );
 }

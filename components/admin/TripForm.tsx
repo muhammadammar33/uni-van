@@ -122,10 +122,10 @@ export function TripForm({
         </p>
         <ol className="space-y-2">
           {stops.map((st, i) => (
-            <li key={st.key} className="flex items-center gap-2">
-              <span className="w-5 text-right text-sm text-slate-400">{i + 1}</span>
+            <li key={st.key} className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-2 sm:flex-nowrap sm:bg-transparent sm:p-0">
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-brand-lt text-xs font-bold text-brand-dk">{i + 1}</span>
               <input
-                className="input flex-1"
+                className="input min-w-0 flex-1 basis-[calc(100%-2.5rem)] sm:basis-auto"
                 placeholder="Stop name, e.g. Saddar Chowk"
                 aria-label={`Stop ${i + 1} name`}
                 value={st.name}
@@ -134,13 +134,13 @@ export function TripForm({
               />
               <input
                 type="time"
-                className="input !w-32"
+                className="input ml-8 !w-32 sm:ml-0"
                 aria-label={`Stop ${i + 1} time`}
                 value={st.time}
                 onChange={(e) => update(st.key, { time: e.target.value })}
                 required
               />
-              <div className="flex">
+              <div className="ml-auto flex sm:ml-0">
                 <button type="button" className="p-1.5 text-slate-400 hover:text-ink disabled:opacity-30" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Move up">
                   <ArrowUp className="size-4" />
                 </button>
@@ -189,7 +189,7 @@ export function TripForm({
 
       {state?.error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{state.error}</p>}
       <div className="flex justify-end">
-        <button className="btn-primary px-6" disabled={pending}>
+        <button className="btn-primary w-full px-8 py-3 text-base sm:w-auto" disabled={pending}>
           {pending ? "Saving…" : submitLabel}
         </button>
       </div>

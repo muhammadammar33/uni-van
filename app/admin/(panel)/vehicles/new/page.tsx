@@ -12,7 +12,7 @@ export default function NewVehiclePage() {
       <Link href="/admin/vehicles" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-ink">
         <ArrowLeft className="size-4" /> Vehicles
       </Link>
-      <h1 className="mb-5 text-2xl font-bold">New vehicle</h1>
+      <h1 className="mb-5 text-2xl font-extrabold tracking-tight sm:text-3xl">New vehicle</h1>
       <LayoutEditor
         initial={hiaceLayout()}
         name=""

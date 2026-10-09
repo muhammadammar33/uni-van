@@ -69,6 +69,8 @@ export function DriverView({ token, initial }: { token: string; initial: DriverT
   const collected = all.reduce((sum, p) => sum + (value(p, "paid") ? (p.fare ?? 0) : 0), 0);
   const hasFares = all.some((p) => p.fare !== null);
   const toHome = trip.direction === "to_home";
+  // The first stop that still has someone to pick up / drop off.
+  const nextStopId = trip.stops.find((st) => st.passengers.some((p) => !value(p, "boarded")))?.id;
 
   return (
     <main className="mx-auto max-w-lg pb-10">
@@ -99,12 +101,27 @@ export function DriverView({ token, initial }: { token: string; initial: DriverT
       {error && <p className="mx-4 mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
       <ol className="space-y-4 px-4 pt-4">
-        {trip.stops.map((stop, i) => (
-          <li key={stop.id} className={`card !p-0 ${stop.passengers.length ? "" : "opacity-60"}`}>
+        {trip.stops.map((stop, i) => {
+          const next = stop.id === nextStopId;
+          const done = stop.passengers.length > 0 && stop.passengers.every((p) => value(p, "boarded"));
+          return (
+          <li
+            key={stop.id}
+            className={`card !p-0 transition ${next ? "ring-2 ring-accent" : ""} ${!stop.passengers.length || done ? "opacity-60" : ""}`}
+          >
             <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
-              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-slate-900 text-xs font-bold text-white">{i + 1}</span>
+              <span
+                className={`grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold ${
+                  done ? "bg-emerald-500 text-white" : next ? "bg-accent text-ink" : "bg-slate-900 text-white"
+                }`}
+              >
+                {done ? <Check className="size-4" strokeWidth={3} /> : i + 1}
+              </span>
               <div className="min-w-0 flex-1">
-                <div className="truncate font-semibold">{stop.name}</div>
+                <div className="flex items-center gap-2 truncate font-semibold">
+                  {stop.name}
+                  {next && <span className="rounded-full bg-accent-lt px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">Next stop</span>}
+                </div>
                 <div className="text-sm text-slate-500">
                   {formatTime(stop.time)} · {stop.passengers.length ? `${stop.passengers.length} ${toHome ? "to drop" : "to pick up"}` : "nobody"}
                 </div>
@@ -162,7 +179,8 @@ export function DriverView({ token, initial }: { token: string; initial: DriverT
               </ul>
             )}
           </li>
-        ))}
+          );
+        })}
       </ol>
       <p className="mt-6 px-4 text-center text-xs text-slate-400">This page updates by itself. Don&apos;t share this link: it shows passengers&apos; phone numbers.</p>
     </main>

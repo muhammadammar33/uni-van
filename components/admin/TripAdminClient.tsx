@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { Banknote, MessageCircle, Phone, RefreshCw, Send, Trash2, UserCheck, X } from "lucide-react";
+import { Armchair, Banknote, MessageCircle, Users, Phone, RefreshCw, Send, Trash2, UserCheck, X } from "lucide-react";
 import { adminBook, duplicateTrip, removeBooking, resetDriverLink, setBookingFlag, type FormState } from "@/app/admin/actions";
 import { CopyButton } from "@/components/admin/CopyButton";
 import { GenderIcon, SeatLegend, SeatMap, type SeatState } from "@/components/SeatMap";
@@ -24,17 +24,31 @@ type Stop = { id: number; name: string; time: string };
 
 export function ShareBox({ url, message }: { url: string; message: string }) {
   return (
-    <section className="card">
-      <h2 className="mb-3 font-semibold">Share in the WhatsApp group</h2>
-      <div className="mb-3 flex items-center gap-2 rounded-lg bg-slate-50 p-2 pl-3 text-sm">
-        <a href={url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate font-medium text-brand hover:underline">
-          {url}
-        </a>
-        <CopyButton text={url} label="Copy link" />
+    <section className="card flex flex-col">
+      <div className="mb-3 flex items-center gap-3">
+        <span className="grid size-10 place-items-center rounded-xl bg-[#25D366]/15 text-[#128C7E]">
+          <Users className="size-5" />
+        </span>
+        <div>
+          <h2 className="font-bold">Students&apos; link</h2>
+          <p className="text-sm text-slate-500">Share in the WhatsApp group</p>
+        </div>
       </div>
-      <pre className="mb-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-slate-200 p-3 font-sans text-sm text-slate-700">{message}</pre>
-      <div className="flex flex-wrap gap-2">
-        <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer" className="btn bg-[#25D366] text-white hover:bg-[#1ebe5b]">
+      <div className="mb-3 flex items-center gap-2 rounded-xl bg-slate-50 p-1.5 pl-3 text-sm ring-1 ring-slate-200/70">
+        <a href={url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate font-medium text-brand hover:underline">
+          {url.replace(/^https?:\/\//, "")}
+        </a>
+        <CopyButton text={url} label="Copy" className="btn-ghost !px-3 !py-1.5" />
+      </div>
+      <details className="group mb-3 text-sm">
+        <summary className="cursor-pointer list-none font-medium text-slate-500 hover:text-ink [&::-webkit-details-marker]:hidden">
+          <span className="group-open:hidden">Preview message ▾</span>
+          <span className="hidden group-open:inline">Hide message ▴</span>
+        </summary>
+        <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-xl bg-[#efeae2] p-3 font-sans text-[13px] text-slate-800">{message}</pre>
+      </details>
+      <div className="mt-auto flex flex-wrap gap-2">
+        <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer" className="btn flex-1 bg-[#25D366] text-white shadow-sm shadow-[#25D366]/30 hover:bg-[#1ebe5b]">
           <Send className="size-4" /> Share on WhatsApp
         </a>
         <CopyButton text={message} label="Copy message" />
@@ -84,7 +98,12 @@ export function AdminSeatPanel({
         </div>
         <div>
           {!seat ? (
-            <p className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">No seat selected</p>
+            <div className="flex h-full min-h-40 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
+              <Armchair className="size-8 text-slate-300" />
+              <p>
+                <b className="text-slate-700">Tap a seat.</b> A booked seat shows the passenger, with call, WhatsApp and Paid ticks. A free seat lets you book it for someone who called you.
+              </p>
+            </div>
           ) : booking ? (
             <PassengerCard tripId={tripId} booking={booking} stop={stops.find((s) => s.id === booking.stopId)} toHome={toHome} onClose={() => setSelected(null)} />
           ) : (
@@ -268,25 +287,34 @@ export function DriverLinkBox({ tripId, url, title }: { tripId: number; url: str
   const [pending, start] = useTransition();
   const message = `🚐 Passenger list for *${title}*\nOpen it on the day, mark who boarded and who paid:\n${url}`;
   return (
-    <section className="card">
-      <h2 className="mb-1 font-semibold">Driver link</h2>
-      <p className="mb-3 text-sm text-slate-500">
-        Send this to the driver only, not the group: it shows passengers&apos; names and phone numbers. No login needed. The driver sees passengers stop by stop and can mark them boarded and paid.
-      </p>
-      <div className="mb-3 flex items-center gap-2 rounded-lg bg-slate-50 p-2 pl-3 text-sm">
-        <a href={url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate font-medium text-brand hover:underline">
-          {url}
-        </a>
-        <CopyButton text={url} label="Copy" />
+    <section className="card flex flex-col">
+      <div className="mb-3 flex items-center gap-3">
+        <span className="grid size-10 place-items-center rounded-xl bg-slate-900 text-white">
+          <UserCheck className="size-5" />
+        </span>
+        <div>
+          <h2 className="font-bold">Driver&apos;s link</h2>
+          <p className="text-sm text-slate-500">Private: send to the driver only</p>
+        </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer" className="btn bg-[#25D366] text-white hover:bg-[#1ebe5b]">
+      <div className="mb-3 flex items-center gap-2 rounded-xl bg-slate-50 p-1.5 pl-3 text-sm ring-1 ring-slate-200/70">
+        <a href={url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate font-medium text-brand hover:underline">
+          {url.replace(/^https?:\/\//, "")}
+        </a>
+        <CopyButton text={url} label="Copy" className="btn-ghost !px-3 !py-1.5" />
+      </div>
+      <p className="mb-3 text-sm text-slate-500">
+        No login. Passengers stop by stop with names and numbers, and Boarded / Paid ticks you see here live.
+      </p>
+      <div className="mt-auto flex flex-wrap gap-2">
+        <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer" className="btn flex-1 bg-slate-900 text-white hover:bg-slate-800">
           <Send className="size-4" /> Send to driver
         </a>
         <button
           type="button"
           className="btn-ghost"
           disabled={pending}
+          title="The current link stops working"
           onClick={() => confirm("Make a new driver link? The current one stops working.") && start(() => resetDriverLink(tripId))}
         >
           <RefreshCw className="size-4" /> New link

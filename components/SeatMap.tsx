@@ -54,41 +54,55 @@ export function GenderIcon({ gender, className }: { gender: Gender; className?: 
   return gender === "female" ? <Venus className={className} aria-label="Female" /> : <Mars className={className} aria-label="Male" />;
 }
 
-/** The vehicle seen from above, front at the top. */
-export function VehicleFrame({ cols, children }: { cols: number; children: React.ReactNode }) {
+/** The vehicle seen from above, front at the top: windscreen, mirrors and a rear bumper. */
+export function VehicleFrame({ cols, children, compact = false }: { cols: number; children: React.ReactNode; compact?: boolean }) {
   return (
-    <div className="mx-auto w-fit rounded-[2rem] border-4 border-slate-300 bg-white px-3 pb-4 pt-2 shadow-inner sm:px-4">
-      <div className="mb-3 text-center text-[11px] font-semibold uppercase tracking-widest text-slate-400">Front</div>
-      <div className="grid gap-1.5 sm:gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
-        {children}
+    <div className="relative mx-auto w-fit px-2">
+      {/* Mirrors */}
+      <span className="absolute left-0 top-10 h-5 w-2.5 rounded-l-md bg-slate-300" />
+      <span className="absolute right-0 top-10 h-5 w-2.5 rounded-r-md bg-slate-300" />
+      <div className={`rounded-b-3xl rounded-t-[2.5rem] border-[3px] border-slate-300 bg-gradient-to-b from-white to-slate-50 shadow-[inset_0_2px_8px_rgb(15_23_42/0.06)] ${compact ? "px-2.5 pb-3 pt-2" : "px-3 pb-4 pt-2.5 sm:px-4"}`}>
+        <div className="mx-3 mb-3 rounded-b-xl rounded-t-[1.5rem] bg-gradient-to-b from-sky-100 to-sky-50 py-1 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-sky-700/60">
+          Front
+        </div>
+        <div className={`grid ${compact ? "gap-1.5" : "gap-1.5 sm:gap-2"}`} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+          {children}
+        </div>
       </div>
+      {/* Rear bumper */}
+      <div className="mx-auto -mt-1 h-2 w-3/4 rounded-b-lg bg-slate-300" />
     </div>
   );
 }
 
 const CELL = "size-12 sm:size-14";
+const CELL_COMPACT = "size-11";
 
 export function SeatMap({
   layout,
   seatState,
   onSelect,
   selectTaken = false,
+  compact = false,
 }: {
   layout: Layout;
   seatState: (id: string) => SeatState;
   onSelect?: (id: string) => void;
   /** Let taken seats be clicked too (admin: open the passenger). */
   selectTaken?: boolean;
+  /** Smaller seats, e.g. inside the phone picture on the home page. */
+  compact?: boolean;
 }) {
+  const cellSize = compact ? CELL_COMPACT : CELL;
   const labels = new Map(seatList(layout).map((s) => [s.id, s.label]));
   return (
-    <VehicleFrame cols={layout.cols}>
+    <VehicleFrame cols={layout.cols} compact={compact}>
       {layout.cells.flatMap((row, r) =>
         row.map((cell, c) => {
           const id = seatId(r, c);
           if (cell.kind !== "seat")
             return (
-              <div key={id} className={CELL}>
+              <div key={id} className={cellSize}>
                 <FixtureCell cell={cell} />
               </div>
             );
@@ -105,7 +119,7 @@ export function SeatMap({
               aria-pressed={st.state === "selected"}
               aria-label={`Seat ${labels.get(id)}${st.title ? `: ${st.title}` : ""}`}
               className={[
-                CELL,
+                cellSize,
                 "relative flex flex-col items-center justify-center rounded-t-2xl rounded-b-lg border-2 text-sm font-bold transition",
                 st.state === "selected" && "scale-105 border-brand bg-brand text-white shadow-lg",
                 st.state === "free" && `${RESERVED_RING[reserved]} bg-white text-slate-700`,

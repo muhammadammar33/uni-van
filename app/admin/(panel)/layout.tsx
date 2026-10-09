@@ -1,45 +1,40 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Bus, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
+import { AdminNav } from "@/components/admin/AdminNav";
+import { Logo } from "@/components/Logo";
 import { requireAdmin } from "@/lib/auth";
 import { logout } from "../actions";
 
-export const metadata: Metadata = { title: { default: "Admin", template: "%s · Van admin" }, robots: { index: false } };
-
-const NAV = [
-  { href: "/admin", label: "Trips" },
-  { href: "/admin/vehicles", label: "Vehicles" },
-  { href: "/admin/account", label: "Account" },
-];
+export const metadata: Metadata = { title: { default: "Admin", template: "%s · Admin" }, robots: { index: false } };
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin();
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-3">
-          <Link href="/admin" className="flex items-center gap-2 font-bold">
-            <span className="grid size-8 place-items-center rounded-lg bg-brand text-white">
-              <Bus className="size-4" />
+      <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5 sm:gap-6">
+          <Link href="/admin" aria-label="Trips" className="shrink-0">
+            <span className="hidden sm:block">
+              <Logo suffix="Admin" />
             </span>
-            <span className="hidden sm:inline">Van admin</span>
+            <span className="sm:hidden">
+              <Logo />
+            </span>
           </Link>
-          <nav className="flex flex-1 gap-1 text-sm font-medium">
-            {NAV.map((n) => (
-              <Link key={n.href} href={n.href} className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100 hover:text-ink">
-                {n.label}
-              </Link>
-            ))}
-          </nav>
-          <form action={logout}>
-            <button className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-slate-500 hover:bg-slate-100" title={`Sign out ${admin.email}`}>
+          <AdminNav />
+          <form action={logout} className="flex items-center gap-3">
+            <span className="hidden text-right text-xs leading-tight md:block">
+              <span className="block font-semibold text-ink">{admin.name}</span>
+              <span className="text-slate-400">{admin.email}</span>
+            </span>
+            <button className="grid size-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-ink" title="Sign out" aria-label="Sign out">
               <LogOut className="size-4" />
-              <span className="hidden sm:inline">Sign out</span>
             </button>
           </form>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 py-6 sm:py-8">{children}</main>
     </div>
   );
 }

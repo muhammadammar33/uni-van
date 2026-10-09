@@ -16,7 +16,7 @@ export default async function AccountPage() {
     .orderBy(asc(s.admins.id));
   return (
     <>
-      <h1 className="mb-5 text-2xl font-bold">Account</h1>
+      <h1 className="mb-5 text-2xl font-extrabold tracking-tight sm:text-3xl">Account</h1>
       <div className="grid gap-5 md:grid-cols-2">
         <section className="card md:col-span-2">
           <h2 className="mb-3 font-semibold">Admins</h2>

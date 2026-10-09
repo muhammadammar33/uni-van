@@ -11,7 +11,7 @@ export default async function NewTripPage() {
   const vehicles = await requireDb().select().from(s.vehicles).orderBy(asc(s.vehicles.id));
   return (
     <>
-      <h1 className="mb-5 text-2xl font-bold">New trip</h1>
+      <h1 className="mb-5 text-2xl font-extrabold tracking-tight sm:text-3xl">New trip</h1>
       {vehicles.length === 0 ? (
         <p className="card">Add a vehicle first under Vehicles.</p>
       ) : (

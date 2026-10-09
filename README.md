@@ -13,6 +13,7 @@ Seat booking for a university van. Instead of messaging the admin in the WhatsAp
 
 | Path | Who | Purpose |
 | --- | --- | --- |
+| `/` | Everyone | Home page: what the service does, a live seat-picking demo, and the trips open for booking (for students who lost the link) |
 | `/t/<code>` | Students | Book a seat on a trip (the link shared in WhatsApp) |
 | `/d/<secret>` | Driver | Passengers by stop, call / WhatsApp, mark boarded and paid (link from the trip page) |
 | `/admin` | Admin | Upcoming and past trips, with seats booked |
@@ -48,6 +49,10 @@ Booking closes when the admin closes it, at the optional **Stop booking at** tim
 - For a seat that costs more or less, open **Seating**, choose the **Seat price** tool, type the price and tap the seats. Leave the price empty and tap to go back to the trip fare. Seat prices can also be saved on a vehicle so every new trip gets them.
 - Each booking keeps the price it was booked at, so changing the fare later doesn't change what booked students were told.
 
+### WhatsApp link previews
+
+Every trip link shows a branded preview card in WhatsApp with the direction, date, first stop and fare (`app/t/[slug]/opengraph-image.tsx`); the home page has its own (`app/opengraph-image.tsx`). Set `SITE_URL` so WhatsApp can fetch them.
+
 ## Stack
 
 Next.js (App Router) + TypeScript, Tailwind CSS, PostgreSQL with Drizzle ORM. Same setup as a free Vercel + Neon deployment.
@@ -59,7 +64,8 @@ Next.js (App Router) + TypeScript, Tailwind CSS, PostgreSQL with Drizzle ORM. Sa
 3. Project → Settings → Environment Variables (see `.env.example`):
    - `AUTH_SECRET`: a random string of 32+ characters (`openssl rand -base64 48`)
    - `ADMIN_EMAIL`, `ADMIN_PASSWORD`: the first admin login
-   - optional `SITE_URL` (e.g. `https://van.example.com`) for share links, and `NEXT_PUBLIC_TIMEZONE` (default `Asia/Karachi`)
+   - optional `SITE_URL` (e.g. `https://van.example.com`) for share links and WhatsApp previews, and `NEXT_PUBLIC_TIMEZONE` (default `Asia/Karachi`)
+   - optional branding: `NEXT_PUBLIC_BRAND_NAME` (default "Uni Van"), `NEXT_PUBLIC_BRAND_TAGLINE`, and `NEXT_PUBLIC_CONTACT_WHATSAPP` (adds "Talk to us" buttons on the home page)
 4. Redeploy. The build runs `scripts/db-setup.ts`, which creates the tables, adds the Hiace and Coaster vehicles, and creates the first admin.
 5. Sign in at `/admin`.
 
@@ -89,7 +95,9 @@ app/t/[slug]/        Student booking page
 app/api/t/[slug]/    Seat map, book, look up and cancel (JSON)
 app/d/[token]/       Driver view; app/api/d/[token]/ its data and boarded/paid ticks
 app/admin/           Login, trips, seating editor, vehicles, account; actions.ts holds the server actions
-components/          SeatMap (shared), BookingFlow (student), admin/ (trip form, layout editor, trip tools)
+components/          SeatMap (shared), BookingFlow (student), DriverView, home/ (landing page demo), admin/ (trip form, layout editor, trip tools)
+lib/brand.ts         Product name, tagline and contact number (from env)
+lib/share.ts         The WhatsApp group message for a trip
 lib/layout.ts        Vehicle grid, seat numbering, neighbour + gender rules (tested in layout.test.ts)
 lib/trips.ts         Loading trips, booking (locked transaction), lookup, cancel, driver view + boarded/paid
 lib/db/schema.ts     Tables: admins, vehicles, trips, stops, bookings

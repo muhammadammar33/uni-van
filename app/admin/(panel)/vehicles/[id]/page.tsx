@@ -20,7 +20,7 @@ export default async function VehiclePage({ params }: PageProps<"/admin/vehicles
         <ArrowLeft className="size-4" /> Vehicles
       </Link>
       <div className="mb-5 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">{vehicle.name}</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{vehicle.name}</h1>
         <ConfirmButton action={deleteVehicle.bind(null, id)} confirm={`Delete "${vehicle.name}"? Trips already using it keep their seating.`} className="btn-danger">
           Delete
         </ConfirmButton>

@@ -17,7 +17,7 @@ export default async function EditTripPage({ params }: PageProps<"/admin/trips/[
       <Link href={`/admin/trips/${id}`} className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-ink">
         <ArrowLeft className="size-4" /> Back to trip
       </Link>
-      <h1 className="mb-5 text-2xl font-bold">Edit trip</h1>
+      <h1 className="mb-5 text-2xl font-extrabold tracking-tight sm:text-3xl">Edit trip</h1>
       <TripForm
         action={updateTrip.bind(null, id)}
         submitLabel="Save changes"
