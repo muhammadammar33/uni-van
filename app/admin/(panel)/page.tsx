@@ -149,8 +149,8 @@ export default async function TripsPage() {
 function Stat({ label, value, tone = "", bar }: { label: string; value: React.ReactNode; tone?: string; bar?: number }) {
   return (
     <div className="card !p-4">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className={`mt-1 text-2xl font-extrabold tracking-tight ${tone}`}>{value}</div>
+      <div className="truncate text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={`mt-1 whitespace-nowrap text-xl font-extrabold tracking-tight sm:text-2xl ${tone}`}>{value}</div>
       {bar !== undefined && (
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
           <div className="h-full rounded-full bg-brand" style={{ width: `${Math.round(Math.min(bar, 1) * 100)}%` }} />
@@ -169,7 +169,7 @@ function TripCard({ row, base }: { row: Row; base: string }) {
   const pct = (n: number) => `${(n / Math.max(total, 1)) * 100}%`;
   const shareText = tripShareMessage(trip, stops, url);
   return (
-    <li className="card group relative flex flex-col !p-0 transition hover:shadow-lift">
+    <li className="card group relative flex min-w-0 flex-col !p-0 transition hover:shadow-lift">
       <Link href={`/admin/trips/${trip.id}`} className="block p-5 pb-4">
         <div className="flex items-center justify-between gap-2">
           <span
@@ -181,10 +181,10 @@ function TripCard({ row, base }: { row: Row; base: string }) {
           </span>
           <span className={`text-xs font-bold ${closed ? "text-slate-400" : "text-emerald-600"}`}>{closed ? "● Closed" : "● Open"}</span>
         </div>
-        <h3 className="mt-2 text-lg font-bold leading-snug group-hover:text-brand">{trip.title}</h3>
-        <p className="mt-0.5 flex items-center gap-1.5 truncate text-sm text-slate-500">
+        <h3 className="mt-2 break-words text-lg font-bold leading-snug group-hover:text-brand">{trip.title}</h3>
+        <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-slate-500">
           <MapPin className="size-3.5 shrink-0" />
-          {stops.length ? `${stops[0].name} ${formatTime(stops[0].time)}${stops.length > 1 ? ` → ${stops.at(-1)!.name}` : ""}` : "No stops yet"}
+          <span className="truncate">{stops.length ? `${stops[0].name} ${formatTime(stops[0].time)}${stops.length > 1 ? ` → ${stops.at(-1)!.name}` : ""}` : "No stops yet"}</span>
         </p>
 
         <div className="mt-4 flex items-end justify-between text-sm">

@@ -13,7 +13,7 @@ const NAV = [
 export function AdminNav() {
   const path = usePathname();
   return (
-    <nav className="flex flex-1 gap-1 text-sm font-semibold">
+    <nav className="flex flex-1 justify-center gap-1 text-sm font-semibold sm:justify-start">
       {NAV.map((n) => {
         const on = n.match(path);
         return (

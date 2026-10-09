@@ -118,9 +118,9 @@ export function DriverView({ token, initial }: { token: string; initial: DriverT
                 {done ? <Check className="size-4" strokeWidth={3} /> : i + 1}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 truncate font-semibold">
-                  {stop.name}
-                  {next && <span className="rounded-full bg-accent-lt px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">Next stop</span>}
+                <div className="flex min-w-0 items-center gap-2 font-semibold">
+                  <span className="truncate">{stop.name}</span>
+                  {next && <span className="shrink-0 rounded-full bg-accent-lt px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">Next stop</span>}
                 </div>
                 <div className="text-sm text-slate-500">
                   {formatTime(stop.time)} · {stop.passengers.length ? `${stop.passengers.length} ${toHome ? "to drop" : "to pick up"}` : "nobody"}
@@ -190,7 +190,7 @@ export function DriverView({ token, initial }: { token: string; initial: DriverT
 function Total({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="px-2 py-2.5">
-      <div className="text-lg font-bold leading-tight">{value}</div>
+      <div className="truncate text-base font-bold leading-tight sm:text-lg">{value}</div>
       <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
     </div>
   );

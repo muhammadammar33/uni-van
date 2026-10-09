@@ -24,7 +24,7 @@ type Stop = { id: number; name: string; time: string };
 
 export function ShareBox({ url, message }: { url: string; message: string }) {
   return (
-    <section className="card flex flex-col">
+    <section className="card flex min-w-0 flex-col">
       <div className="mb-3 flex items-center gap-3">
         <span className="grid size-10 place-items-center rounded-xl bg-[#25D366]/15 text-[#128C7E]">
           <Users className="size-5" />
@@ -287,7 +287,7 @@ export function DriverLinkBox({ tripId, url, title }: { tripId: number; url: str
   const [pending, start] = useTransition();
   const message = `🚐 Passenger list for *${title}*\nOpen it on the day, mark who boarded and who paid:\n${url}`;
   return (
-    <section className="card flex flex-col">
+    <section className="card flex min-w-0 flex-col">
       <div className="mb-3 flex items-center gap-3">
         <span className="grid size-10 place-items-center rounded-xl bg-slate-900 text-white">
           <UserCheck className="size-5" />

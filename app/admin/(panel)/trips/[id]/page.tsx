@@ -86,7 +86,7 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
               {closed ? "● Closed" : "● Open for booking"}
             </span>
           </div>
-          <h1 className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">{trip.title}</h1>
+          <h1 className="mt-2 break-words text-2xl font-extrabold tracking-tight sm:text-3xl">{trip.title}</h1>
           <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-500">
             <span className="font-semibold text-slate-700">{formatDate(trip.date, true)}</span>
             {trip.departTime && <span>Departs {formatTime(trip.departTime)}</span>}
@@ -139,7 +139,7 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fares collected</div>
           {hasFares ? (
             <>
-              <div className="mt-1 text-3xl font-extrabold tracking-tight text-emerald-700">
+              <div className="mt-1 text-2xl font-extrabold tracking-tight text-emerald-700 sm:text-3xl">
                 {formatFare(collected)}
                 <span className="text-lg text-slate-400"> / {expected.toLocaleString("en-US")}</span>
               </div>
@@ -191,13 +191,16 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
                 </div>
                 <ul>
                   {passengers.map((p) => (
-                    <li key={p.id} className="flex items-center gap-3 py-1.5 text-sm">
-                      <span className="w-12 font-semibold text-slate-500">#{p.seatLabel}</span>
+                    <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2 text-sm sm:flex-nowrap sm:py-1.5">
+                      <span className="w-9 shrink-0 font-semibold text-slate-500 sm:w-12">#{p.seatLabel}</span>
                       <GenderIcon gender={p.gender} className={`size-4 shrink-0 ${p.gender === "female" ? "text-female" : "text-male"}`} />
-                      <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                      {p.fare !== null && <span className="hidden text-slate-500 sm:inline">{formatFare(p.fare)}</span>}
-                      <FlagToggle tripId={id} booking={p} field="boarded" label={toHome ? "Dropped" : "Boarded"} />
-                      <FlagToggle tripId={id} booking={p} field="paid" label="Paid" />
+                      <span className="min-w-0 flex-1 truncate font-medium sm:font-normal">{p.name}</span>
+                      {/* On phones the fare and ticks drop to a second line under the name. */}
+                      <div className="order-last flex w-full items-center gap-2 pl-[3.25rem] sm:order-none sm:w-auto sm:pl-0">
+                        {p.fare !== null && <span className="mr-auto whitespace-nowrap text-slate-500 sm:mr-0">{formatFare(p.fare)}</span>}
+                        <FlagToggle tripId={id} booking={p} field="boarded" label={toHome ? "Dropped" : "Boarded"} />
+                        <FlagToggle tripId={id} booking={p} field="paid" label="Paid" />
+                      </div>
                       <a href={`tel:+${p.phone}`} className="hidden text-slate-600 hover:text-ink sm:inline">
                         {displayPhone(p.phone)}
                       </a>

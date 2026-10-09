@@ -92,7 +92,7 @@ function Nav() {
   return (
     <header className="absolute inset-x-0 top-0 z-20">
       <div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-4 sm:px-6">
-        <Link href="/" aria-label={BRAND.name}>
+        <Link href="/" aria-label={BRAND.name} className="min-w-0">
           <Logo light />
         </Link>
         <nav className="hidden flex-1 gap-6 text-sm font-medium text-teal-100 md:flex">
@@ -109,7 +109,7 @@ function Nav() {
             FAQ
           </a>
         </nav>
-        <Link href="/admin" className="ml-auto rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/20 backdrop-blur hover:bg-white/20 md:ml-0">
+        <Link href="/admin" className="ml-auto shrink-0 rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/20 backdrop-blur hover:bg-white/20 md:ml-0">
           Admin sign in
         </Link>
       </div>

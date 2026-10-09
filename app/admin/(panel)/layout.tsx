@@ -14,16 +14,16 @@ export default async function PanelLayout({ children }: { children: React.ReactN
     <div className="min-h-dvh">
       <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5 sm:gap-6">
-          <Link href="/admin" aria-label="Trips" className="shrink-0">
-            <span className="hidden sm:block">
+          <Link href="/admin" aria-label="Trips" className="min-w-0 shrink">
+            <span className="hidden max-w-64 sm:block">
               <Logo suffix="Admin" />
             </span>
             <span className="sm:hidden">
-              <Logo />
+              <Logo iconOnly />
             </span>
           </Link>
           <AdminNav />
-          <form action={logout} className="flex items-center gap-3">
+          <form action={logout} className="flex shrink-0 items-center gap-3">
             <span className="hidden text-right text-xs leading-tight md:block">
               <span className="block font-semibold text-ink">{admin.name}</span>
               <span className="text-slate-400">{admin.email}</span>
