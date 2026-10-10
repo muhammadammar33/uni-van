@@ -1,6 +1,6 @@
 "use client";
 
-import { DoorOpen, Lock, Mars, Venus } from "lucide-react";
+import { DoorOpen, Lock, Mars, User, Venus } from "lucide-react";
 import type { Cell, Gender, Layout, SeatGender } from "@/lib/layout";
 import { seatId, seatList } from "@/lib/layout";
 
@@ -84,6 +84,7 @@ export function SeatMap({
   onSelect,
   selectTaken = false,
   compact = false,
+  neutral = false,
 }: {
   layout: Layout;
   seatState: (id: string) => SeatState;
@@ -92,6 +93,8 @@ export function SeatMap({
   selectTaken?: boolean;
   /** Smaller seats, e.g. inside the phone picture on the home page. */
   compact?: boolean;
+  /** Trips without the male/female rule: don't show seats as female-only / male-only. */
+  neutral?: boolean;
 }) {
   const cellSize = compact ? CELL_COMPACT : CELL;
   const labels = new Map(seatList(layout).map((s) => [s.id, s.label]));
@@ -107,7 +110,7 @@ export function SeatMap({
               </div>
             );
           const st = seatState(id);
-          const reserved = cell.gender ?? "any";
+          const reserved = neutral ? "any" : (cell.gender ?? "any");
           const clickable = !!onSelect && (st.state === "free" || st.state === "selected" || (selectTaken && st.state === "taken"));
           return (
             <button
@@ -146,6 +149,8 @@ export function SeatMap({
               />
               {st.state === "taken" && st.takenBy ? (
                 <GenderIcon gender={st.takenBy} className="size-4" />
+              ) : st.state === "taken" ? (
+                <User className="size-4" />
               ) : st.state === "blocked" ? (
                 <Lock className="size-3.5" />
               ) : (
@@ -160,7 +165,7 @@ export function SeatMap({
   );
 }
 
-export function SeatLegend({ items }: { items: ("female" | "male" | "any" | "selected" | "takenF" | "takenM" | "blocked")[] }) {
+export function SeatLegend({ items }: { items: ("female" | "male" | "any" | "selected" | "takenF" | "takenM" | "takenAny" | "blocked")[] }) {
   const all = {
     female: ["border-female bg-white", "Females only"],
     male: ["border-male bg-white", "Males only"],
@@ -168,6 +173,7 @@ export function SeatLegend({ items }: { items: ("female" | "male" | "any" | "sel
     selected: ["border-brand bg-brand", "Your pick"],
     takenF: ["border-female/40 bg-female-lt", "Taken (female)"],
     takenM: ["border-male/40 bg-male-lt", "Taken (male)"],
+    takenAny: ["border-slate-300 bg-slate-200", "Taken"],
     blocked: ["seat-blocked border-slate-200 bg-slate-50", "Not available to you"],
   } as const;
   return (

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { BookingFlow } from "@/components/BookingFlow";
-import { DIRECTION_LABEL, formatDate } from "@/lib/format";
+import { formatDateRange } from "@/lib/format";
+import { orgInfo } from "@/lib/orgTypes";
 import { publicTrip } from "@/lib/trips";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: PageProps<"/t/[slug]">): Promise<Metadata> {
   const trip = await publicTrip((await params).slug);
   if (!trip) return { title: "Trip not found" };
-  const description = `${DIRECTION_LABEL[trip.direction]} · ${formatDate(trip.date, true)}. Pick your stop and seat.`;
+  const description = `${trip.org.name} · ${orgInfo(trip.org.type).direction[trip.direction]} · ${formatDateRange(trip.date, trip.endDate, true)}. Pick your stop and seat.`;
   return { title: trip.title, description, openGraph: { title: `🚐 ${trip.title}`, description } };
 }
 

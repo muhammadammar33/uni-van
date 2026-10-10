@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Banknote, Bus, CalendarDays, Check, Clock, MapPin, MessageCircle, Phone, UserCheck } from "lucide-react";
 import { GenderIcon } from "@/components/SeatMap";
-import { DIRECTION_LABEL, displayPhone, formatDate, formatFare, formatTime } from "@/lib/format";
+import { displayPhone, formatDateRange, formatFare, formatTime } from "@/lib/format";
+import { orgInfo } from "@/lib/orgTypes";
 import type { DriverPassenger, DriverTrip } from "@/lib/trips";
 
 const POLL_MS = 15_000;
@@ -85,16 +86,16 @@ export function DriverView({ token, initial }: { token: string; initial: DriverT
     <main className="mx-auto max-w-lg pb-10">
       <header className="bg-slate-900 px-4 pb-4 pt-5 text-white">
         <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-teal-300">
-          <Bus className="size-4" /> Driver · {DIRECTION_LABEL[trip.direction]}
+          <Bus className="size-4" /> Driver · {trip.org.name} · {orgInfo(trip.org.type).direction[trip.direction]}
         </div>
         <h1 className="text-xl font-bold leading-tight">{trip.title}</h1>
         <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-300">
           <span className="flex items-center gap-1.5">
-            <CalendarDays className="size-4" /> {formatDate(trip.date, true)}
+            <CalendarDays className="size-4" /> {formatDateRange(trip.date, trip.endDate, true)}
           </span>
           {trip.departTime && (
             <span className="flex items-center gap-1.5">
-              <Clock className="size-4" /> {toHome ? "Leave university" : "Depart"} {formatTime(trip.departTime)}
+              <Clock className="size-4" /> Depart {formatTime(trip.departTime)}
             </span>
           )}
           <span>{trip.vehicleName}</span>
@@ -153,7 +154,7 @@ export function DriverView({ token, initial }: { token: string; initial: DriverT
                       <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-sm font-bold">{p.seatLabel}</span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 font-medium">
-                          <GenderIcon gender={p.gender} className={`size-4 shrink-0 ${p.gender === "female" ? "text-female" : "text-male"}`} />
+                          {p.gender && <GenderIcon gender={p.gender} className={`size-4 shrink-0 ${p.gender === "female" ? "text-female" : "text-male"}`} />}
                           <span className="truncate">{p.name}</span>
                         </div>
                         <div className="text-sm text-slate-500">

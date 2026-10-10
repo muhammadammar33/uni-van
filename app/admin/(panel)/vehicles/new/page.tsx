@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { requireOrg } from "@/lib/auth";
 import { LayoutEditor } from "@/components/admin/LayoutEditor";
 import { busLayout, hiaceLayout } from "@/lib/layout";
 import { saveVehicle } from "../../../actions";
 
 export const metadata = { title: "New vehicle" };
 
-export default function NewVehiclePage() {
+export default async function NewVehiclePage() {
+  await requireOrg();
   return (
     <>
       <Link href="/admin/vehicles" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-ink">

@@ -76,15 +76,23 @@ export function neighbours(layout: Layout, id: string): string[] {
     .map((c) => seatId(seat.r, c));
 }
 
-export type Taken = Record<string, Gender>;
+/** Booked seats and who sits in them; null when the trip doesn't ask for gender. */
+export type Taken = Record<string, Gender | null>;
+
+export type GenderRule = "separate" | "none";
 
 export type SeatCheck = { ok: true } | { ok: false; reason: string };
 
-/** Can a passenger of `gender` sit in `id`, given the seats already taken? */
-export function checkSeat(layout: Layout, taken: Taken, id: string, gender: Gender): SeatCheck {
+/**
+ * Can a passenger of `gender` sit in `id`, given the seats already taken?
+ * With rule "none" (tours, families) only availability counts: no reserved seats, no neighbour rule.
+ */
+export function checkSeat(layout: Layout, taken: Taken, id: string, gender: Gender | null, rule: GenderRule = "separate"): SeatCheck {
   const seat = findSeat(layout, id);
   if (!seat) return { ok: false, reason: "That seat does not exist." };
-  if (taken[id]) return { ok: false, reason: "That seat was just taken. Please pick another one." };
+  if (id in taken) return { ok: false, reason: "That seat was just taken. Please pick another one." };
+  if (rule === "none") return { ok: true };
+  if (!gender) return { ok: false, reason: "Choose female or male first." };
   if (seat.gender !== "any" && seat.gender !== gender) {
     return { ok: false, reason: `Seat ${seat.label} is reserved for ${seat.gender === "male" ? "males" : "females"}.` };
   }
@@ -96,15 +104,15 @@ export function checkSeat(layout: Layout, taken: Taken, id: string, gender: Gend
 
 export type SeatStats = { total: number; free: number; freeFor: Record<Gender, number> };
 
-export function seatStats(layout: Layout, taken: Taken): SeatStats {
+export function seatStats(layout: Layout, taken: Taken, rule: GenderRule = "separate"): SeatStats {
   const seats = seatList(layout);
-  const free = seats.filter((s) => !taken[s.id]);
+  const free = seats.filter((s) => !(s.id in taken));
   return {
     total: seats.length,
     free: free.length,
     freeFor: {
-      male: free.filter((s) => checkSeat(layout, taken, s.id, "male").ok).length,
-      female: free.filter((s) => checkSeat(layout, taken, s.id, "female").ok).length,
+      male: free.filter((s) => checkSeat(layout, taken, s.id, "male", rule).ok).length,
+      female: free.filter((s) => checkSeat(layout, taken, s.id, "female", rule).ok).length,
     },
   };
 }
@@ -121,14 +129,14 @@ export function genderClashes(layout: Layout): [Seat, Seat][] {
 }
 
 /** Why a new layout would break existing bookings (seat removed, or reserved for the other gender), if it would. */
-export function layoutConflicts(next: Layout, taken: Taken, prev: Layout): string[] {
+export function layoutConflicts(next: Layout, taken: Taken, prev: Layout, rule: GenderRule = "separate"): string[] {
   const prevLabels = new Map(seatList(prev).map((s) => [s.id, s.label]));
   const problems: string[] = [];
   for (const [id, gender] of Object.entries(taken)) {
     const label = prevLabels.get(id) ?? id;
     const seat = findSeat(next, id);
     if (!seat) problems.push(`Seat ${label} is booked and can't be removed.`);
-    else if (seat.gender !== "any" && seat.gender !== gender) problems.push(`Seat ${label} is booked by a ${gender} passenger.`);
+    else if (rule === "separate" && gender && seat.gender !== "any" && seat.gender !== gender) problems.push(`Seat ${label} is booked by a ${gender} passenger.`);
   }
   return problems;
 }

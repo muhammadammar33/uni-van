@@ -8,7 +8,7 @@ export const contentType = "image/png";
 export default function Image() {
   return new ImageResponse(
     (
-      <OgFrame eyebrow="University van booking" title="Pick your stop. Pick your seat. Done.">
+      <OgFrame eyebrow="Vans · Coasters · Buses · Tours" title="Pick your stop. Pick your seat. Done.">
         <div style={{ display: "flex", gap: 16 }}>
           <OgPill>One link in WhatsApp</OgPill>
           <OgPill>Safe seating</OgPill>

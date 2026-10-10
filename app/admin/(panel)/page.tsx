@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { asc, desc, gte, inArray, lt } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { ArrowRight, Bus, CalendarPlus, ChevronRight, MapPin, Plus } from "lucide-react";
 import { CopyButton } from "@/components/admin/CopyButton";
 import { WhatsAppShareButton } from "@/components/admin/WhatsAppShareButton";
-import { requireAdmin } from "@/lib/auth";
+import { requireOrg } from "@/lib/auth";
+import { orgInfo, type OrgType } from "@/lib/orgTypes";
 import { requireDb, schema as s } from "@/lib/db";
-import { DIRECTION_LABEL, formatDate, formatFare, formatTime, nowLocal, todayLocal } from "@/lib/format";
+import { formatDate, formatDateRange, formatFare, nowLocal, todayLocal } from "@/lib/format";
 import { seatList } from "@/lib/layout";
 import { closedReason } from "@/lib/trips";
 import { tripShareMessage } from "@/lib/share";
@@ -14,13 +15,14 @@ import { siteUrl } from "@/lib/url";
 
 export const metadata = { title: "Trips" };
 
-async function loadTrips(upcoming: boolean) {
+async function loadTrips(orgId: number, upcoming: boolean) {
   const db = requireDb();
   const today = todayLocal();
   const trips = await db
     .select()
     .from(s.trips)
-    .where(upcoming ? gte(s.trips.date, today) : lt(s.trips.date, today))
+    // A multi-day trip stays upcoming until its last day.
+    .where(and(eq(s.trips.orgId, orgId), upcoming ? sql`coalesce(${s.trips.endDate}, ${s.trips.date}) >= ${today}` : sql`coalesce(${s.trips.endDate}, ${s.trips.date}) < ${today}`))
     .orderBy(upcoming ? asc(s.trips.date) : desc(s.trips.date), asc(s.trips.direction))
     .limit(upcoming ? 100 : 20);
   const ids = trips.map((t) => t.id);
@@ -38,6 +40,8 @@ async function loadTrips(upcoming: boolean) {
       total: seatList(trip.layout).length,
       female: mine.filter((b) => b.gender === "female").length,
       male: mine.filter((b) => b.gender === "male").length,
+      /** Seats booked without a gender (trips without the seating rule). */
+      other: mine.filter((b) => !b.gender).length,
       expected: mine.reduce((sum, b) => sum + (b.fare ?? 0), 0),
       collected: mine.reduce((sum, b) => sum + (b.paid ? (b.fare ?? 0) : 0), 0),
       stops: tripStops,
@@ -60,7 +64,8 @@ function greeting() {
 }
 
 export default async function TripsPage() {
-  const [admin, upcoming, past, h] = await Promise.all([requireAdmin(), loadTrips(true), loadTrips(false), headers()]);
+  const { admin, org } = await requireOrg();
+  const [upcoming, past, h] = await Promise.all([loadTrips(org.id, true), loadTrips(org.id, false), headers()]);
   const base = siteUrl(h);
   const today = todayLocal();
 
@@ -99,7 +104,7 @@ export default async function TripsPage() {
             <CalendarPlus className="size-8" />
           </span>
           <h2 className="text-lg font-bold">No upcoming trips</h2>
-          <p className="max-w-sm text-slate-600">Create a trip, then share its link in the WhatsApp group. Students book their own seats.</p>
+          <p className="max-w-sm text-slate-600">Create a trip, then share its link in your WhatsApp group. Everyone books their own seat.</p>
           <Link href="/admin/trips/new" className="btn-primary mt-2">
             Create your first trip <ArrowRight className="size-4" />
           </Link>
@@ -112,9 +117,9 @@ export default async function TripsPage() {
                 {dayLabel(date, today)}
                 {dayLabel(date, today) !== formatDate(date, true) && <span className="font-medium normal-case tracking-normal text-slate-400">· {formatDate(date)}</span>}
               </h2>
-              <ul className="grid gap-4 md:grid-cols-2">
+              <ul className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
                 {rows.map((r) => (
-                  <TripCard key={r.trip.id} row={r} base={base} />
+                  <TripCard key={r.trip.id} row={r} base={base} orgType={org.type} />
                 ))}
               </ul>
             </section>
@@ -160,14 +165,14 @@ function Stat({ label, value, tone = "", bar }: { label: string; value: React.Re
   );
 }
 
-function TripCard({ row, base }: { row: Row; base: string }) {
-  const { trip, total, female, male, stops, expected, collected } = row;
-  const booked = female + male;
+function TripCard({ row, base, orgType }: { row: Row; base: string; orgType: OrgType }) {
+  const { trip, total, female, male, other, stops, expected, collected } = row;
+  const booked = female + male + other;
   const closed = closedReason(trip);
   const url = `${base}/t/${trip.slug}`;
   const toHome = trip.direction === "to_home";
   const pct = (n: number) => `${(n / Math.max(total, 1)) * 100}%`;
-  const shareText = tripShareMessage(trip, stops, url);
+  const shareText = tripShareMessage(trip, stops, url, orgType);
   return (
     <li className="card group relative flex min-w-0 flex-col !p-0 transition hover:shadow-lift">
       <Link href={`/admin/trips/${trip.id}`} className="block p-5 pb-4">
@@ -177,14 +182,15 @@ function TripCard({ row, base }: { row: Row; base: string }) {
               toHome ? "bg-amber-100 text-amber-800" : "bg-brand-lt text-brand-dk"
             }`}
           >
-            <Bus className="size-3.5" /> {DIRECTION_LABEL[trip.direction]}
+            <Bus className="size-3.5" /> {orgInfo(orgType).direction[trip.direction]}
           </span>
+          {trip.endDate && <span className="text-xs font-bold text-slate-500">{formatDateRange(trip.date, trip.endDate)}</span>}
           <span className={`text-xs font-bold ${closed ? "text-slate-400" : "text-emerald-600"}`}>{closed ? "● Closed" : "● Open"}</span>
         </div>
         <h3 className="mt-2 break-words text-lg font-bold leading-snug group-hover:text-brand">{trip.title}</h3>
         <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-slate-500">
           <MapPin className="size-3.5 shrink-0" />
-          <span className="truncate">{stops.length ? `${stops[0].name} ${formatTime(stops[0].time)}${stops.length > 1 ? ` → ${stops.at(-1)!.name}` : ""}` : "No stops yet"}</span>
+          <span className="truncate">{stops.length ? `${stops[0].name}${stops.length > 1 ? ` → ${stops.at(-1)!.name}` : ""}` : "No stops yet"}</span>
         </p>
 
         <div className="mt-4 flex items-end justify-between text-sm">
@@ -201,14 +207,21 @@ function TripCard({ row, base }: { row: Row; base: string }) {
         <div className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-slate-100" title={`${female} female, ${male} male`}>
           <div className="h-full bg-female/70" style={{ width: pct(female) }} />
           <div className="h-full bg-male/70" style={{ width: pct(male) }} />
+          <div className="h-full bg-brand/60" style={{ width: pct(other) }} />
         </div>
         <div className="mt-1.5 flex gap-3 text-xs text-slate-500">
-          <span className="flex items-center gap-1">
-            <span className="size-2 rounded-full bg-female/70" /> {female} female
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="size-2 rounded-full bg-male/70" /> {male} male
-          </span>
+          {trip.genderRule === "separate" ? (
+            <>
+              <span className="flex items-center gap-1">
+                <span className="size-2 rounded-full bg-female/70" /> {female} female
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="size-2 rounded-full bg-male/70" /> {male} male
+              </span>
+            </>
+          ) : (
+            <span>{trip.membersOnly ? "Registered riders" : `Up to ${trip.maxSeats} seats per booking`}</span>
+          )}
           <span className="ml-auto">{total - booked} free</span>
         </div>
       </Link>

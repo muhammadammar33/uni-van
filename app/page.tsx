@@ -28,7 +28,8 @@ import { PhoneFrame } from "@/components/home/PhoneFrame";
 import { Logo } from "@/components/Logo";
 import { BRAND } from "@/lib/brand";
 import { db, schema as s } from "@/lib/db";
-import { DIRECTION_LABEL, formatDate, formatFare, formatTime, todayLocal } from "@/lib/format";
+import { formatDateRange, formatFare, formatTime, todayLocal } from "@/lib/format";
+import { ORG_TYPE_INFO, ORG_TYPES, orgInfo } from "@/lib/orgTypes";
 import { fareRange, seatList } from "@/lib/layout";
 import { closedReason } from "@/lib/trips";
 
@@ -39,11 +40,13 @@ async function openTrips() {
   if (!db) return [];
   try {
     const rows = await db
-      .select({ trip: s.trips, booked: sql<number>`count(${s.bookings.id})::int` })
+      .select({ trip: s.trips, org: s.organizations, booked: sql<number>`count(${s.bookings.id})::int` })
       .from(s.trips)
+      .innerJoin(s.organizations, eq(s.organizations.id, s.trips.orgId))
       .leftJoin(s.bookings, eq(s.bookings.tripId, s.trips.id))
-      .where(and(eq(s.trips.status, "open"), gte(s.trips.date, todayLocal())))
-      .groupBy(s.trips.id)
+      // Registered-riders-only trips (universities, companies) aren't advertised publicly.
+      .where(and(eq(s.trips.status, "open"), eq(s.trips.membersOnly, false), eq(s.organizations.active, true), gte(s.trips.date, todayLocal())))
+      .groupBy(s.trips.id, s.organizations.id)
       .orderBy(asc(s.trips.date), asc(s.trips.direction))
       .limit(12);
     const firstStops = rows.length
@@ -54,10 +57,11 @@ async function openTrips() {
           .orderBy(asc(s.stops.sortOrder), asc(s.stops.time))
       : [];
     return rows
-      .filter((r) => !closedReason(r.trip))
+      .filter((r) => !closedReason(r.trip, r.org))
       .slice(0, 6)
-      .map(({ trip, booked }) => ({
+      .map(({ trip, org, booked }) => ({
         trip,
+        org,
         booked,
         total: seatList(trip.layout).length,
         fares: fareRange(trip.layout, trip.fare),
@@ -68,7 +72,7 @@ async function openTrips() {
   }
 }
 
-const contactHref = BRAND.whatsapp ? `https://wa.me/${BRAND.whatsapp}?text=${encodeURIComponent(`Hi! I'm interested in ${BRAND.name} for our van.`)}` : null;
+const contactHref = BRAND.whatsapp ? `https://wa.me/${BRAND.whatsapp}?text=${encodeURIComponent(`Hi! I'm interested in ${BRAND.name} for our organisation.`)}` : null;
 
 export default async function Home() {
   const trips = await openTrips();
@@ -76,6 +80,7 @@ export default async function Home() {
     <div className="bg-white">
       <Nav />
       <Hero />
+      <WhoItsFor />
       {trips.length > 0 && <OpenTrips trips={trips} />}
       <BeforeAfter />
       <HowItWorks />
@@ -96,6 +101,9 @@ function Nav() {
           <Logo light />
         </Link>
         <nav className="hidden flex-1 gap-6 text-sm font-medium text-teal-100 md:flex">
+          <a href="#who" className="hover:text-white">
+            Who it&apos;s for
+          </a>
           <a href="#how" className="hover:text-white">
             How it works
           </a>
@@ -124,14 +132,14 @@ function Hero() {
       <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="animate-rise">
           <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm font-medium text-teal-50 ring-1 ring-white/20">
-            <Sparkles className="size-4 text-accent" /> Made for university vans
+            <Sparkles className="size-4 text-accent" /> Made in Pakistan, for Pakistani roads
           </span>
           <h1 className="mt-5 text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
             No more <span className="text-accent">&ldquo;Sir, is there a seat?&rdquo;</span> messages.
           </h1>
           <p className="mt-5 max-w-xl text-lg text-teal-50/90">
-            Share one link in the WhatsApp group. Students pick their stop, see the pickup time, and choose a seat on a picture of the van, with
-            separate seating for males and females. The van fills itself.
+            One booking link for your WhatsApp group. Passengers pick their stop, see the pickup time and choose a seat on a picture of the vehicle, with
+            males and females seated apart. For van and coaster operators, universities, colleges and schools, tour companies and staff transport.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <a href="#demo" className="btn-accent px-6 py-3 text-base">
@@ -172,6 +180,43 @@ function Hero() {
   );
 }
 
+const WHO_POINTS: Record<(typeof ORG_TYPES)[number], string[]> = {
+  transport: ["Daily routes between cities, new passengers every trip", "Fare per seat, pricier front seats", "Driver's list with paid / boarded ticks"],
+  institution: ["Upload your student list from Excel or CSV", "Only registered students can book; gender comes from your list", "Every bus and route under one transport office"],
+  tour: ["Multi-day trips with your itinerary", "Families book several seats together", "A public page listing all your upcoming tours"],
+  company: ["Upload your staff list, shift by shift", "Only registered employees can book", "Know who's on which van before it leaves"],
+};
+
+function WhoItsFor() {
+  return (
+    <section id="who" className="scroll-mt-10 py-20">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <span className="text-sm font-bold uppercase tracking-wider text-brand">Who it&apos;s for</span>
+          <h2 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">One platform for everyone who moves people</h2>
+          <p className="mt-3 text-lg text-slate-600">Each organisation gets its own account, admins, vehicles and rules, set up for how they work.</p>
+        </div>
+        <ul className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {ORG_TYPES.map((t) => (
+            <li key={t} className="group flex flex-col rounded-3xl border border-slate-200/80 bg-white p-6 shadow-soft transition hover:-translate-y-1 hover:shadow-lift">
+              <span className="grid size-14 place-items-center rounded-2xl bg-brand-lt text-3xl transition group-hover:scale-110">{ORG_TYPE_INFO[t].emoji}</span>
+              <h3 className="mt-4 text-lg font-bold leading-snug">{ORG_TYPE_INFO[t].label}</h3>
+              <p className="mt-1.5 text-sm text-slate-600">{ORG_TYPE_INFO[t].blurb}</p>
+              <ul className="mt-4 space-y-2 border-t border-slate-100 pt-4 text-sm">
+                {WHO_POINTS[t].map((p) => (
+                  <li key={p} className="flex gap-2">
+                    <Check className="mt-0.5 size-4 shrink-0 text-brand" /> {p}
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
 type OpenTrip = Awaited<ReturnType<typeof openTrips>>[number];
 
 function OpenTrips({ trips }: { trips: OpenTrip[] }) {
@@ -191,15 +236,17 @@ function OpenTrips({ trips }: { trips: OpenTrip[] }) {
             Live
           </span>
         </div>
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {trips.map(({ trip, booked, total, fares, first }) => {
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 [&>*]:min-w-0">
+          {trips.map(({ trip, org, booked, total, fares, first }) => {
             const left = total - booked;
             return (
               <li key={trip.id}>
                 <Link href={`/t/${trip.slug}`} className="card group flex h-full flex-col !p-5 transition hover:-translate-y-0.5 hover:shadow-lift">
                   <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide">
-                    <span className={trip.direction === "to_uni" ? "text-brand" : "text-amber-700"}>{DIRECTION_LABEL[trip.direction]}</span>
-                    <span className="text-slate-500">{formatDate(trip.date)}</span>
+                    <span className="min-w-0 truncate text-brand">
+                      {orgInfo(org.type).emoji} {org.name}
+                    </span>
+                    <span className="shrink-0 text-slate-500">{formatDateRange(trip.date, trip.endDate)}</span>
                   </div>
                   <div className="mt-2 text-lg font-bold leading-snug">{trip.title}</div>
                   {first && (
@@ -497,6 +544,9 @@ function Faq() {
     ["What if two students choose the same seat at the same time?", "Only the first booking goes through. The second student is told right away and picks another seat. The seat map also refreshes every few seconds."],
     ["Can a student change or cancel?", "Yes. The booking page remembers their booking, and they can cancel with one tap until booking closes. On another phone they use their phone number and booking code."],
     ["What about the trip back home?", "One tap turns the morning trip into the return trip: direction flipped, stops reversed. Set the drop-off times and share the new link."],
+    ["We're a university / school. Can only our own students book?", "Yes. Upload your student list from Excel or CSV (or add students one by one). On trips marked for registered students, they confirm with their phone number and roll number, and their name and gender come from your list, so nobody can book under a false gender."],
+    ["We run tours. Can a family book together?", "Yes. Tour trips can allow several seats per booking without the male/female rule, show multi-day dates and your itinerary, and nothing is kept about travellers after the trip."],
+    ["Can one company run many vans, or many campuses?", "Each organisation gets its own account with its own admins, vehicles, trips and lists. Add as many vehicles and trips as you run, and as many admins as you need."],
     ["Does the driver see phone numbers?", "Only through the driver's private link, which the admin sends to the driver alone. Students never see each other's names or numbers."],
   ];
   return (
@@ -527,12 +577,14 @@ function FinalCta() {
     <section className="px-4 pb-20 sm:px-6">
       <div className="bg-hero relative mx-auto max-w-6xl overflow-hidden rounded-3xl px-6 py-14 text-center text-white sm:px-12">
         <div className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:radial-gradient(white_1px,transparent_1px)] [background-size:22px_22px]" />
-        <h2 className="relative text-3xl font-extrabold tracking-tight sm:text-4xl">Fill your van tonight, not at 10 PM.</h2>
-        <p className="relative mx-auto mt-3 max-w-xl text-lg text-teal-50/90">Set up the first trip in a couple of minutes and share it with your group.</p>
+        <h2 className="relative text-3xl font-extrabold tracking-tight sm:text-4xl">Fill every seat, without a single phone call.</h2>
+        <p className="relative mx-auto mt-3 max-w-xl text-lg text-teal-50/90">
+          Van operators, universities, schools, tour companies and staff transport: we set up your account, you share the first link today.
+        </p>
         <div className="relative mt-8 flex flex-wrap justify-center gap-3">
           {contactHref && (
             <a href={contactHref} target="_blank" rel="noreferrer" className="btn-accent px-6 py-3 text-base">
-              <MessageCircle className="size-4" /> Get it for your van
+              <MessageCircle className="size-4" /> Get {BRAND.name} for your organisation
             </a>
           )}
           <Link href="/admin" className={contactHref ? "btn px-6 py-3 text-base text-white ring-1 ring-white/30 hover:bg-white/10" : "btn-accent px-6 py-3 text-base"}>

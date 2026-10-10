@@ -1,17 +1,13 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { TripForm } from "@/components/admin/TripForm";
-import { loadTrip } from "@/lib/trips";
+import { adminTrip } from "@/lib/adminData";
 import { updateTrip } from "../../../../actions";
 
 export const metadata = { title: "Edit trip" };
 
 export default async function EditTripPage({ params }: PageProps<"/admin/trips/[id]/edit">) {
-  const id = Number((await params).id);
-  const data = Number.isInteger(id) ? await loadTrip({ id }) : null;
-  if (!data) notFound();
-  const { trip, stops } = data;
+  const { id, trip, org, stops } = await adminTrip((await params).id);
   return (
     <>
       <Link href={`/admin/trips/${id}`} className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-ink">
@@ -21,10 +17,15 @@ export default async function EditTripPage({ params }: PageProps<"/admin/trips/[
       <TripForm
         action={updateTrip.bind(null, id)}
         submitLabel="Save changes"
+        orgType={org.type}
         initial={{
           title: trip.title,
           direction: trip.direction,
           date: trip.date,
+          endDate: trip.endDate ?? "",
+          genderRule: trip.genderRule,
+          maxSeats: trip.maxSeats,
+          membersOnly: trip.membersOnly,
           departTime: trip.departTime ?? "",
           closesAt: trip.closesAt ?? "",
           notes: trip.notes ?? "",

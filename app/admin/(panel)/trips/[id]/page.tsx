@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
 import { ArrowLeft, Armchair, Lock, LockOpen, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
 import { CopyButton } from "@/components/admin/CopyButton";
 import { AdminSeatPanel, DriverLinkBox, DuplicateForm, FlagToggle, RemoveBookingButton, ShareBox, type AdminBooking } from "@/components/admin/TripAdminClient";
 import { GenderIcon } from "@/components/SeatMap";
-import { DIRECTION_LABEL, displayPhone, formatDate, formatFare, formatTime } from "@/lib/format";
+import { adminTrip } from "@/lib/adminData";
+import { displayPhone, formatDate, formatDateRange, formatFare, formatTime } from "@/lib/format";
+import { orgInfo } from "@/lib/orgTypes";
 import { fareRange, findSeat, seatStats } from "@/lib/layout";
-import { closedReason, loadTrip, takenSeats } from "@/lib/trips";
+import { closedReason, takenSeats } from "@/lib/trips";
 import { tripShareMessage } from "@/lib/share";
 import { siteUrl } from "@/lib/url";
 import { deleteTrip, setTripStatus } from "../../../actions";
@@ -22,17 +23,15 @@ function addDays(ymd: string, days: number) {
 }
 
 export default async function TripAdminPage({ params }: PageProps<"/admin/trips/[id]">) {
-  const id = Number((await params).id);
-  const data = Number.isInteger(id) ? await loadTrip({ id }) : null;
-  if (!data) notFound();
-  const { trip, stops, bookings } = data;
+  const { id, trip, org, stops, bookings } = await adminTrip((await params).id);
+  const info = orgInfo(org.type);
   const toHome = trip.direction === "to_home";
   const base = siteUrl(await headers());
   const url = `${base}/t/${trip.slug}`;
   const driverUrl = `${base}/d/${trip.driverToken}`;
   const fares = fareRange(trip.layout, trip.fare);
-  const closed = closedReason(trip);
-  const stats = seatStats(trip.layout, takenSeats(bookings));
+  const closed = closedReason(trip, org);
+  const stats = seatStats(trip.layout, takenSeats(bookings), trip.genderRule);
 
   const rows: AdminBooking[] = bookings.map((b) => ({
     id: b.id,
@@ -55,7 +54,7 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
   }));
 
   const stopWord = toHome ? "Drop-off" : "Pickup";
-  const message = tripShareMessage(trip, stops, url);
+  const message = tripShareMessage(trip, stops, url, org.type);
 
   const passengerList = [
     `*${trip.title}*: ${formatDate(trip.date)}`,
@@ -65,6 +64,8 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
   ].join("\n");
 
   const females = bookings.filter((b) => b.gender === "female").length;
+  const males = bookings.filter((b) => b.gender === "male").length;
+  const others = bookings.length - females - males;
 
   return (
     <>
@@ -80,15 +81,18 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
                 toHome ? "bg-amber-100 text-amber-800" : "bg-brand-lt text-brand-dk"
               }`}
             >
-              {DIRECTION_LABEL[trip.direction]}
+              {info.direction[trip.direction]}
             </span>
             <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${closed ? "bg-slate-200 text-slate-600" : "bg-emerald-100 text-emerald-800"}`}>
               {closed ? "● Closed" : "● Open for booking"}
             </span>
+            {trip.membersOnly && <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-bold text-violet-800">Registered {info.riders} only</span>}
+            {trip.genderRule === "none" && <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">No male/female rule</span>}
+            {trip.maxSeats > 1 && <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">Up to {trip.maxSeats} seats per booking</span>}
           </div>
           <h1 className="mt-2 break-words text-2xl font-extrabold tracking-tight sm:text-3xl">{trip.title}</h1>
           <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-500">
-            <span className="font-semibold text-slate-700">{formatDate(trip.date, true)}</span>
+            <span className="font-semibold text-slate-700">{formatDateRange(trip.date, trip.endDate, true)}</span>
             {trip.departTime && <span>Departs {formatTime(trip.departTime)}</span>}
             <span>{trip.vehicleName}</span>
             {fares && <span>{fares.min === fares.max ? formatFare(fares.min) : `${formatFare(fares.min)}–${formatFare(fares.max)}`} per seat</span>}
@@ -124,16 +128,23 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
           </div>
           <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-slate-100">
             <div className="bg-female/70" style={{ width: `${(females / Math.max(stats.total, 1)) * 100}%` }} />
-            <div className="bg-male/70" style={{ width: `${((bookings.length - females) / Math.max(stats.total, 1)) * 100}%` }} />
+            <div className="bg-male/70" style={{ width: `${(males / Math.max(stats.total, 1)) * 100}%` }} />
+            <div className="bg-brand/60" style={{ width: `${(others / Math.max(stats.total, 1)) * 100}%` }} />
           </div>
-          <div className="mt-2 flex justify-between text-xs text-slate-500">
-            <span>
-              <b className="text-female">{females}</b> female · <b className="text-male">{bookings.length - females}</b> male
-            </span>
-            <span>
-              free: <b className="text-female">{stats.freeFor.female}</b> F · <b className="text-male">{stats.freeFor.male}</b> M
-            </span>
-          </div>
+          {trip.genderRule === "separate" ? (
+            <div className="mt-2 flex justify-between text-xs text-slate-500">
+              <span>
+                <b className="text-female">{females}</b> female · <b className="text-male">{males}</b> male
+              </span>
+              <span>
+                free: <b className="text-female">{stats.freeFor.female}</b> F · <b className="text-male">{stats.freeFor.male}</b> M
+              </span>
+            </div>
+          ) : (
+            <div className="mt-2 text-xs text-slate-500">
+              {stats.free} free · no male/female rule{trip.maxSeats > 1 ? ` · up to ${trip.maxSeats} seats per booking` : ""}
+            </div>
+          )}
         </div>
         <div className="card !p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fares collected</div>
@@ -173,7 +184,14 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
           <DriverLinkBox tripId={id} url={driverUrl} title={trip.title} />
         </div>
 
-        <AdminSeatPanel tripId={id} layout={trip.layout} bookings={rows} stops={stops.map((s) => ({ id: s.id, name: s.name, time: s.time }))} toHome={toHome} />
+        <AdminSeatPanel
+          tripId={id}
+          layout={trip.layout}
+          bookings={rows}
+          stops={stops.map((s) => ({ id: s.id, name: s.name, time: s.time }))}
+          toHome={toHome}
+          rules={{ genderRule: trip.genderRule, membersOnly: trip.membersOnly, rider: info.rider }}
+        />
 
         <section className="card">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -193,7 +211,7 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
                   {passengers.map((p) => (
                     <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2 text-sm sm:flex-nowrap sm:py-1.5">
                       <span className="w-9 shrink-0 font-semibold text-slate-500 sm:w-12">#{p.seatLabel}</span>
-                      <GenderIcon gender={p.gender} className={`size-4 shrink-0 ${p.gender === "female" ? "text-female" : "text-male"}`} />
+                      {p.gender ? <GenderIcon gender={p.gender} className={`size-4 shrink-0 ${p.gender === "female" ? "text-female" : "text-male"}`} /> : <span className="size-4 shrink-0" />}
                       <span className="min-w-0 flex-1 truncate font-medium sm:font-normal">{p.name}</span>
                       {/* On phones the fare and ticks drop to a second line under the name. */}
                       <div className="order-last flex w-full items-center gap-2 pl-[3.25rem] sm:order-none sm:w-auto sm:pl-0">
@@ -217,7 +235,7 @@ export default async function TripAdminPage({ params }: PageProps<"/admin/trips/
         </section>
 
         <div className="grid gap-5 md:grid-cols-2">
-          <DuplicateForm tripId={id} nextDate={addDays(trip.date, 1)} returnLabel={DIRECTION_LABEL[toHome ? "to_uni" : "to_home"]} />
+          <DuplicateForm tripId={id} nextDate={addDays(trip.date, 1)} returnLabel={info.direction[toHome ? "to_uni" : "to_home"]} />
           <section className="card">
             <h2 className="mb-1 font-semibold">Delete trip</h2>
             <p className="mb-3 text-sm text-slate-500">Removes the trip, its stops and all bookings. The link stops working.</p>

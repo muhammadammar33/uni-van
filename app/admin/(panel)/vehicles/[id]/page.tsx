@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { requireOrg } from "@/lib/auth";
 import { ArrowLeft } from "lucide-react";
 import { LayoutEditor } from "@/components/admin/LayoutEditor";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
@@ -12,7 +13,11 @@ export const metadata = { title: "Vehicle" };
 export default async function VehiclePage({ params }: PageProps<"/admin/vehicles/[id]">) {
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
-  const [vehicle] = await requireDb().select().from(s.vehicles).where(eq(s.vehicles.id, id));
+  const { org } = await requireOrg();
+  const [vehicle] = await requireDb()
+    .select()
+    .from(s.vehicles)
+    .where(and(eq(s.vehicles.id, id), eq(s.vehicles.orgId, org.id)));
   if (!vehicle) notFound();
   return (
     <>

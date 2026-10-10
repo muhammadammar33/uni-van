@@ -1,25 +1,27 @@
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Trash2 } from "lucide-react";
 import { AddAdminForm, ChangePasswordForm } from "@/components/admin/AccountForms";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
-import { requireAdmin } from "@/lib/auth";
+import { requireOrg } from "@/lib/auth";
 import { requireDb, schema as s } from "@/lib/db";
 import { removeAdmin } from "../../actions";
 
-export const metadata = { title: "Account" };
+export const metadata = { title: "Team" };
 
 export default async function AccountPage() {
-  const me = await requireAdmin();
+  const { admin: me, org } = await requireOrg();
   const admins = await requireDb()
     .select({ id: s.admins.id, name: s.admins.name, email: s.admins.email })
     .from(s.admins)
+    .where(eq(s.admins.orgId, org.id))
     .orderBy(asc(s.admins.id));
   return (
     <>
-      <h1 className="mb-5 text-2xl font-extrabold tracking-tight sm:text-3xl">Account</h1>
+      <h1 className="mb-1 text-2xl font-extrabold tracking-tight sm:text-3xl">Team</h1>
+      <p className="mb-5 text-sm text-slate-500">People who can sign in and manage {org.name}.</p>
       <div className="grid gap-5 md:grid-cols-2">
         <section className="card md:col-span-2">
-          <h2 className="mb-3 font-semibold">Admins</h2>
+          <h2 className="mb-3 font-semibold">Admins of {org.name}</h2>
           <ul className="divide-y divide-slate-100">
             {admins.map((a) => (
               <li key={a.id} className="flex items-center gap-3 py-2">

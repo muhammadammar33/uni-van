@@ -41,7 +41,7 @@ export function LayoutEditor({
 }: {
   initial: Layout;
   /** Seats with passengers (trip seating): they can't be removed or given to the other gender. */
-  booked?: Record<string, Gender>;
+  booked?: Record<string, Gender | null>;
   /** Saved vehicles to start over from. */
   presets?: { name: string; layout: Layout }[];
   /** Shown as an editable name field when set (vehicles). */
@@ -70,9 +70,11 @@ export function LayoutEditor({
     setMessage(undefined);
   };
 
+  // A booked seat must stay a seat, and (when we know who sits there) stay open to their gender.
   const allowed = (id: string, cell: Cell) => {
+    if (!(id in booked)) return true;
     const who = booked[id];
-    return !who || (cell.kind === "seat" && (cell.gender === "any" || cell.gender === who));
+    return cell.kind === "seat" && (!who || cell.gender === "any" || cell.gender === who);
   };
 
   const paint = (r: number, c: number) => {
@@ -96,7 +98,11 @@ export function LayoutEditor({
       return;
     }
     if (!allowed(id, tool.cell)) {
-      setMessage({ error: `Seat ${labels.get(id)} has a ${booked[id]} passenger, so it can only be a ${booked[id]} or open seat.` });
+      setMessage({
+        error: booked[id]
+          ? `Seat ${labels.get(id)} has a ${booked[id]} passenger, so it can only be a ${booked[id]} or open seat.`
+          : `Seat ${labels.get(id)} is booked, so it has to stay a seat.`,
+      });
       return;
     }
     // Functional update: a fast drag paints several cells before the next render.
@@ -172,7 +178,7 @@ export function LayoutEditor({
                       >
                         <span className="flex items-center gap-0.5">
                           {labels.get(id)}
-                          {booked[id] && <Lock className="size-3" />}
+                          {id in booked && <Lock className="size-3" />}
                         </span>
                         {cell.fare !== undefined && <span className="text-[9px] font-semibold leading-none text-emerald-700">Rs{cell.fare}</span>}
                       </span>

@@ -1,3 +1,5 @@
+import { ORG_TYPE_INFO, type OrgType } from "@/lib/orgTypes";
+
 /** Timezone trips are planned in. Dates and times are stored as plain local strings ("2026-10-12", "07:15"). */
 export const TIMEZONE = process.env.NEXT_PUBLIC_TIMEZONE || "Asia/Karachi";
 
@@ -68,8 +70,15 @@ export function todayLocal(): string {
 export const DIRECTION_LABEL = { to_uni: "To University", to_home: "To Home" } as const;
 export const GENDER_LABEL = { male: "Male", female: "Female", any: "Anyone" } as const;
 
-export function defaultTitle(direction: keyof typeof DIRECTION_LABEL, date: string) {
-  return `Van ${DIRECTION_LABEL[direction].toLowerCase()} · ${formatDate(date)}`;
+/** Title for a trip the admin didn't name: "To campus · Mon, 12 Oct". */
+export function defaultTitle(direction: keyof typeof DIRECTION_LABEL, date: string, orgType: OrgType = "transport") {
+  return `${ORG_TYPE_INFO[orgType].direction[direction]} · ${formatDate(date)}`;
+}
+
+/** "12 Oct" or "12 – 14 Oct" for multi-day trips. */
+export function formatDateRange(start: string, end: string | null, long = false): string {
+  if (!end || end === start) return formatDate(start, long);
+  return `${formatDate(start)} – ${formatDate(end)}${long ? ` ${end.slice(0, 4)}` : ""}`;
 }
 
 /** 1500 -> "Rs. 1,500" */

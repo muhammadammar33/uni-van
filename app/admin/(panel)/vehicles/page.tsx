@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
+import { requireOrg } from "@/lib/auth";
 import { ChevronRight, Plus } from "lucide-react";
 import { requireDb, schema as s } from "@/lib/db";
 import { MiniLayout } from "@/components/MiniLayout";
@@ -8,7 +9,8 @@ import { seatList } from "@/lib/layout";
 export const metadata = { title: "Vehicles" };
 
 export default async function VehiclesPage() {
-  const vehicles = await requireDb().select().from(s.vehicles).orderBy(asc(s.vehicles.id));
+  const { org } = await requireOrg();
+  const vehicles = await requireDb().select().from(s.vehicles).where(eq(s.vehicles.orgId, org.id)).orderBy(asc(s.vehicles.id));
   return (
     <>
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -18,7 +20,7 @@ export default async function VehiclesPage() {
         </Link>
       </div>
       <p className="mb-5 text-sm text-slate-600">Saved seating plans. A new trip copies the plan of the vehicle you choose.</p>
-      <ul className="grid gap-3 md:grid-cols-2">
+      <ul className="grid gap-3 md:grid-cols-2 [&>*]:min-w-0">
         {vehicles.map((v) => {
           const seats = seatList(v.layout);
           const count = (g: string) => seats.filter((x) => x.gender === g).length;

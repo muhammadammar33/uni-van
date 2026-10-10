@@ -9,13 +9,15 @@ import { GenderIcon, SeatLegend, SeatMap, type SeatState } from "@/components/Se
 import { displayPhone, formatFare, formatTime } from "@/lib/format";
 import { checkSeat, findSeat, GENDERS, type Gender, type Layout, type Taken } from "@/lib/layout";
 
+export type AdminBookRules = { genderRule: "separate" | "none"; membersOnly: boolean; rider: string };
+
 export type AdminBooking = {
   id: number;
   seatId: string;
   seatLabel: string;
   name: string;
   phone: string;
-  gender: Gender;
+  gender: Gender | null;
   stopId: number;
   fare: number | null;
   boarded: boolean;
@@ -64,12 +66,14 @@ export function AdminSeatPanel({
   bookings,
   stops,
   toHome,
+  rules,
 }: {
   tripId: number;
   layout: Layout;
   bookings: AdminBooking[];
   stops: Stop[];
   toHome: boolean;
+  rules: AdminBookRules;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const bySeat = new Map(bookings.map((b) => [b.seatId, b]));
@@ -77,8 +81,8 @@ export function AdminSeatPanel({
 
   const seatState = (id: string): SeatState => {
     const b = bySeat.get(id);
-    if (b) return { state: id === selected ? "selected" : "taken", takenBy: b.gender, caption: b.name.split(" ")[0], title: `${b.name} · ${displayPhone(b.phone)}` };
-    const fits = GENDERS.filter((g) => checkSeat(layout, taken, id, g).ok);
+    if (b) return { state: id === selected ? "selected" : "taken", takenBy: b.gender ?? undefined, caption: b.name.split(" ")[0], title: `${b.name} · ${displayPhone(b.phone)}` };
+    const fits = GENDERS.filter((g) => checkSeat(layout, taken, id, g, rules.genderRule).ok);
     if (!fits.length) return { state: id === selected ? "selected" : "blocked", title: "No one can sit here: opposite genders on both sides" };
     return { state: id === selected ? "selected" : "free" };
   };
@@ -92,7 +96,7 @@ export function AdminSeatPanel({
       <p className="mb-4 text-sm text-slate-500">Tap a booked seat to see the passenger, or a free seat to book it for someone.</p>
       <div className="grid gap-6 md:grid-cols-[auto_1fr]">
         <div>
-          <SeatMap layout={layout} seatState={seatState} onSelect={(id) => setSelected((cur) => (cur === id ? null : id))} selectTaken />
+          <SeatMap layout={layout} seatState={seatState} onSelect={(id) => setSelected((cur) => (cur === id ? null : id))} selectTaken neutral={rules.genderRule === "none"} />
           <div className="mt-4">
             <SeatLegend items={["female", "male", "any", "takenF", "takenM"]} />
           </div>
@@ -113,7 +117,8 @@ export function AdminSeatPanel({
               tripId={tripId}
               seatId={seat.id}
               seatLabel={seat.label}
-              allowed={GENDERS.filter((g) => checkSeat(layout, taken, seat.id, g).ok)}
+              allowed={GENDERS.filter((g) => checkSeat(layout, taken, seat.id, g, rules.genderRule).ok)}
+              rules={rules}
               stops={stops}
               onDone={() => setSelected(null)}
             />
@@ -136,7 +141,7 @@ function PassengerCard({ tripId, booking, stop, toHome, onClose }: { tripId: num
         <div>
           <div className="text-xs uppercase tracking-wide text-slate-500">Seat {booking.seatLabel}</div>
           <div className="flex items-center gap-1.5 text-lg font-semibold">
-            <GenderIcon gender={booking.gender} className={`size-4 ${booking.gender === "female" ? "text-female" : "text-male"}`} />
+            {booking.gender && <GenderIcon gender={booking.gender} className={`size-4 ${booking.gender === "female" ? "text-female" : "text-male"}`} />}
             {booking.name}
           </div>
         </div>
@@ -184,6 +189,7 @@ function AdminBookForm({
   allowed,
   stops,
   onDone,
+  rules,
 }: {
   tripId: number;
   seatId: string;
@@ -191,6 +197,7 @@ function AdminBookForm({
   allowed: Gender[];
   stops: Stop[];
   onDone: () => void;
+  rules: AdminBookRules;
 }) {
   const [state, action, pending] = useActionState(async (_: FormState, form: FormData) => {
     const res = await adminBook(tripId, { ...Object.fromEntries(form), seatId });
@@ -201,16 +208,22 @@ function AdminBookForm({
   return (
     <form onSubmit={keepFields(action)} className="space-y-3 rounded-xl border border-slate-200 p-4">
       <h3 className="font-semibold">Book seat {seatLabel} for someone</h3>
-      <input name="name" required placeholder="Name" className="input" />
+      {rules.membersOnly ? (
+        <p className="text-xs text-slate-500">Registered {rules.rider}s only: enter their phone number and their name and gender come from the list.</p>
+      ) : (
+        <input name="name" required placeholder="Name" className="input" />
+      )}
       <input name="phone" required type="tel" placeholder="Phone, e.g. 0300 1234567" className="input" />
-      <div className="grid grid-cols-2 gap-2">
-        <select name="gender" className="input" defaultValue={allowed[0]}>
-          {allowed.map((g) => (
-            <option key={g} value={g}>
-              {g === "female" ? "Female" : "Male"}
-            </option>
-          ))}
-        </select>
+      <div className={`grid gap-2 ${rules.membersOnly || rules.genderRule === "none" ? "" : "grid-cols-2"}`}>
+        {!rules.membersOnly && rules.genderRule === "separate" && (
+          <select name="gender" className="input" defaultValue={allowed[0]}>
+            {allowed.map((g) => (
+              <option key={g} value={g}>
+                {g === "female" ? "Female" : "Male"}
+              </option>
+            ))}
+          </select>
+        )}
         <select name="stopId" className="input" required defaultValue="">
           <option value="" disabled>
             Stop…

@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 import { OgFrame, OgPill } from "@/components/og/OgFrame";
-import { DIRECTION_LABEL, formatDate, formatFare, formatTime } from "@/lib/format";
+import { formatDateRange, formatFare, formatTime } from "@/lib/format";
+import { orgInfo } from "@/lib/orgTypes";
 import { fareRange } from "@/lib/layout";
 import { publicTrip } from "@/lib/trips";
 
@@ -16,7 +17,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   const first = trip.stops[0];
   return new ImageResponse(
     (
-      <OgFrame eyebrow={`${DIRECTION_LABEL[trip.direction]} · ${formatDate(trip.date, true)}`} title={trip.title}>
+      <OgFrame eyebrow={`${trip.org.name} · ${orgInfo(trip.org.type).direction[trip.direction]} · ${formatDateRange(trip.date, trip.endDate, true)}`} title={trip.title}>
         <div style={{ display: "flex", gap: 16 }}>
           {first && <OgPill>{`${first.name.length > 22 ? `${first.name.slice(0, 21)}…` : first.name} · ${formatTime(first.time)}`}</OgPill>}
           {fares && <OgPill>{fares.min === fares.max ? formatFare(fares.min) : `from ${formatFare(fares.min)}`}</OgPill>}

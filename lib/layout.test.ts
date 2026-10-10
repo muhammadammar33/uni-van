@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { checkSeat, fareRange, genderClashes, seatFare, hiaceLayout, layoutConflicts, neighbours, parseLayout, seatList, seatStats } from "./layout";
-import { formatDate, formatFare, formatTime, normalizePhone } from "./format";
+import { formatDate, formatDateRange, formatFare, formatTime, normalizePhone } from "./format";
 
 const hiace = hiaceLayout();
 
@@ -95,4 +95,33 @@ test("parseLayout keeps seat fares", () => {
   const l = parseLayout({ rows: 1, cols: 2, cells: [[{ kind: "seat", fare: 350 }, { kind: "door", fare: 9 }]] });
   assert.deepEqual(l.cells[0], [{ kind: "seat", gender: "any", fare: 350 }, { kind: "door" }]);
   assert.throws(() => parseLayout({ rows: 1, cols: 1, cells: [[{ kind: "seat", fare: -5 }]] }));
+});
+
+test("rule 'none' ignores reserved seats and neighbours, but not taken seats", () => {
+  const taken = { "2-0": "female" as const, "4-0": null };
+  assert.equal(checkSeat(hiace, taken, "2-1", "male", "none").ok, true);
+  assert.equal(checkSeat(hiace, taken, "0-2", null, "none").ok, true); // female-only seat, no rule
+  assert.equal(checkSeat(hiace, taken, "4-0", null, "none").ok, false);
+  assert.equal(checkSeat(hiace, taken, "0-2", null, "separate").ok, false); // gender needed with the rule
+  assert.equal(seatStats(hiace, taken, "none").freeFor.male, 13);
+});
+
+import { parseCsv, readRiderRows } from "./riders";
+
+test("rider list: loose headers, Pakistani phones, problems per row", () => {
+  const table = parseCsv(
+    'Student Name,Mobile No,Sex,Roll Number,Programme\n"Khan, Ayesha",0300-1234567,F,21-CS-01,BSCS\nAli Raza,+92 301 7654321,male,,\n,0300 1111111,M,,\nSana,12345,F,,\nHamza,03017654321,M,,\n',
+  );
+  const { riders, problems, missing } = readRiderRows(table);
+  assert.deepEqual(missing, []);
+  assert.equal(riders.length, 2);
+  assert.deepEqual(riders[0], { name: "Khan, Ayesha", phone: "923001234567", gender: "female", refNo: "21-CS-01", groupName: "BSCS", stop: null });
+  assert.deepEqual(problems.map((p) => p.row), [4, 5, 6]);
+  assert.match(problems[2].message, /Same phone as row 3/);
+  assert.deepEqual(readRiderRows([["Name", "Email"]]).missing, ["Phone", "Gender"]);
+});
+
+test("date ranges", () => {
+  assert.equal(formatDateRange("2026-10-16", "2026-10-18", true), "Fri, 16 Oct – Sun, 18 Oct 2026");
+  assert.equal(formatDateRange("2026-10-16", null, true), "Friday, 16 October 2026");
 });

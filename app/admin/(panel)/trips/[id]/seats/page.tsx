@@ -1,19 +1,18 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
 import { LayoutEditor } from "@/components/admin/LayoutEditor";
 import { requireDb, schema as s } from "@/lib/db";
-import { loadTrip, takenSeats } from "@/lib/trips";
+import { adminTrip } from "@/lib/adminData";
+import { takenSeats } from "@/lib/trips";
 import { saveTripLayout } from "../../../../actions";
 
 export const metadata = { title: "Trip seating" };
 
 export default async function TripSeatsPage({ params }: PageProps<"/admin/trips/[id]/seats">) {
-  const id = Number((await params).id);
-  const data = Number.isInteger(id) ? await loadTrip({ id }) : null;
-  if (!data) notFound();
-  const vehicles = await requireDb().select().from(s.vehicles).orderBy(asc(s.vehicles.id));
+  const data = await adminTrip((await params).id);
+  const { id } = data;
+  const vehicles = await requireDb().select().from(s.vehicles).where(eq(s.vehicles.orgId, data.org.id)).orderBy(asc(s.vehicles.id));
   return (
     <>
       <Link href={`/admin/trips/${id}`} className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-ink">
