@@ -23,7 +23,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
     if (orgInfo(org.type).roster) items.push({ href: "/admin/riders", label: orgInfo(org.type).riders.replace(/^./, (c) => c.toUpperCase()), icon: "riders" });
     items.push({ href: "/admin/account", label: "Team", icon: "team" });
   }
-  if (admin.role === "super") items.push({ href: "/admin/orgs", label: "Organisations", icon: "orgs" });
+  if (admin.role === "super") items.push({ href: "/admin/orgs", label: "Organisations", icon: "orgs" }, { href: "/admin/rides", label: "Carpool", icon: "carpool" });
 
   return (
     <div className="min-h-dvh">

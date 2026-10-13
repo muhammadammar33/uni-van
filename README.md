@@ -1,5 +1,47 @@
 # Hamsafar
 
+**Right now Hamsafar is a carpool site for the Wah Cantt – Islamabad – Rawalpindi – Rawat corridor.** Drivers offer the empty seats in their car without signing up; riders search by pickup and drop-off and book a seat. The organisations platform described further down (vans, universities, tours, companies) is still in the code and still works, but it's hidden from the home page for now.
+
+## Carpool
+
+### Drivers (no account)
+
+1. **Offer a ride** (`/offer`): starting point, any stops on the way, final destination. Each comes from the list of about 75 common places from Wah Cantt to Rawat, or from "use my current location", or from a pin dropped on the map.
+2. When: **one day**, **every day**, or **chosen days of the week** (e.g. Mon – Fri), with an optional end date and the leaving time.
+3. Car, number plate, seats, fare per seat, who can ride (anyone / women only / men only), a note, and the driver's name, WhatsApp number and gender.
+4. Publishing gives the driver a **private link** (`/r/manage/<token>`), which they can also send to their own WhatsApp. It shows who booked each day (call / WhatsApp / remove) and lets them edit, pause, resume or cancel the ride and share their live location while driving. The link is the only key: anyone who has it can manage the ride. This browser also remembers the rides it created ("Your rides" on the home page).
+
+### Riders (no account)
+
+1. Search (`/` or `/search`) with a pickup and a drop-off (from the list, current location, or a pin) and optionally a day.
+2. A ride matches when its route passes within about **3 km** of both points, **in the right direction**. Each result shows where to get on and off and how far the pickup is.
+3. The ride page (`/r/<slug>`) shows the route on a map and the driver's live position. Book with name, phone and gender. The booking shows the driver's number with one-tap WhatsApp (message already written) and call. A seat can be cancelled from the same browser or with phone + booking code.
+4. Rules: no double booking (locked transaction), one booking per phone per day, women-only / men-only rides enforced, seats can't be cut below what's already booked, and the route is locked once riders have booked.
+
+### Location and privacy
+
+- The site asks once for location access, with an explanation. It's used to suggest the nearest places and to centre the map.
+- The **live map** on the home page shows drivers who are sharing their location (exact position, first name, linked to their ride) and riders who chose "Show me on the live map". Riders are **blurred to about 300 m and nameless**, and nobody appears unless they tap the button. Positions disappear after 3 minutes without an update.
+- A driver's phone number is shown only to riders who booked; riders' numbers are shown only to their driver.
+
+### Carpool pages and API
+
+| Path | Purpose |
+| --- | --- |
+| `/` | Search, "rides leaving soon", your rides, live map |
+| `/search?from=&to=&date=` | Matching rides on a map |
+| `/offer` | Offer a ride |
+| `/r/<slug>` | Public ride page and booking (the link to share) |
+| `/r/manage/<token>` | Driver's private page |
+| `/admin/rides` | Super admin: all carpool rides |
+| `GET/POST /api/rides`, `/api/rides/<slug>[/book\|/lookup\|/cancel]`, `/api/rides/manage/<token>`, `/api/live` | JSON API used by the pages |
+
+The places list is in `lib/places.ts`, route matching in `lib/geo.ts` and schedules in `lib/schedule.ts` (`npm test` covers them). The maps are OpenStreetMap tiles drawn with Leaflet, and place names for dropped pins come from Nominatim. Neither needs an API key.
+
+## Organisations platform (hidden for now)
+
+Its landing page is at `/business` (not linked or indexed). `/admin`, `/o/<org>`, `/t/<code>` and `/d/<secret>` all work as before.
+
 Seat booking for every van, coaster and bus in Pakistan. An organisation shares one link in its WhatsApp group; passengers pick their stop, see the pickup time and choose a seat on a picture of the vehicle, with males and females seated apart.
 
 ## Who it's for
@@ -26,7 +68,7 @@ Every rule can be changed per trip (seating rule, seats per booking, registered-
 
 | Path | Who | Purpose |
 | --- | --- | --- |
-| `/` | Everyone | Home page: who it's for, a live seat-picking demo, public trips open for booking |
+| `/business` | Everyone | Organisations landing page (hidden): who it's for, a live seat-picking demo, public trips |
 | `/o/<org>` | Everyone | An organisation's page: contact details and its open trips / tours |
 | `/t/<code>` | Passengers | Book a seat (the link shared in WhatsApp) |
 | `/d/<secret>` | Driver | Passengers stop by stop, call / WhatsApp, mark boarded and paid |

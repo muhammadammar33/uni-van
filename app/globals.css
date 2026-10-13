@@ -106,3 +106,76 @@ body {
 @utility card {
   @apply rounded-2xl border border-slate-200/80 bg-white p-4 shadow-soft sm:p-6;
 }
+
+/* Map markers (Leaflet divIcons) */
+.hm-pin {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 3px 8px 3px 4px;
+  font: 700 12px/1 var(--font-sans);
+  box-shadow: 0 4px 12px rgb(15 23 42 / 0.25);
+}
+.hm-pin span {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+}
+.hm-driver {
+  background: var(--color-brand);
+  color: #fff;
+}
+.hm-drop {
+  background: var(--color-accent);
+  padding: 3px;
+}
+.hm-dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgb(15 23 42 / 0.3);
+}
+.hm-rider {
+  background: #f59e0b;
+}
+.hm-me {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #2563eb;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 6px rgb(37 99 235 / 0.2);
+}
+.hm-me i {
+  position: absolute;
+  inset: -9px;
+  border-radius: 999px;
+  border: 2px solid rgb(37 99 235 / 0.5);
+  animation: hm-ping 2s ease-out infinite;
+}
+@keyframes hm-ping {
+  from {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+.leaflet-container {
+  font-family: var(--font-sans);
+}

@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, pgEnum, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, doublePrecision, index, integer, jsonb, pgEnum, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import type { Layout } from "../layout";
 
 export const directionEnum = pgEnum("trip_direction", ["to_uni", "to_home"]);
@@ -148,3 +148,102 @@ export type Rider = typeof riders.$inferSelect;
 export type Trip = typeof trips.$inferSelect;
 export type Stop = typeof stops.$inferSelect;
 export type Booking = typeof bookings.$inferSelect;
+
+/* ---------- Carpool ---------- */
+
+export const rideScheduleEnum = pgEnum("ride_schedule", ["once", "daily", "weekly"]);
+export const rideStatusEnum = pgEnum("ride_status", ["active", "paused", "cancelled"]);
+/** Who may ride: anyone, or only women / only men (e.g. a female driver taking female passengers). */
+export const rideRidersEnum = pgEnum("ride_riders", ["anyone", "female", "male"]);
+
+/** A carpool ride offered by a driver, without an account. The driver manages it through /r/manage/<manageToken>. */
+export const rides = pgTable(
+  "rides",
+  {
+    id: serial("id").primaryKey(),
+    /** Public link: /r/<slug> */
+    slug: text("slug").notNull().unique(),
+    /** Secret for the driver's page. */
+    manageToken: text("manage_token").notNull().unique(),
+    driverName: text("driver_name").notNull(),
+    /** Digits with country code. Shown to riders once they have booked. */
+    driverPhone: text("driver_phone").notNull(),
+    driverGender: genderEnum("driver_gender").notNull(),
+    /** "Suzuki Cultus, white" */
+    car: text("car").notNull(),
+    plate: text("plate"),
+    seats: integer("seats").notNull(),
+    /** Per seat, whole rupees; null = free / to be agreed. */
+    fare: integer("fare"),
+    riders: rideRidersEnum("riders").default("anyone").notNull(),
+    /** Local "HH:MM" leaving the first point. */
+    departTime: text("depart_time").notNull(),
+    schedule: rideScheduleEnum("schedule").notNull(),
+    /** First (or only) day, "YYYY-MM-DD". */
+    date: text("date").notNull(),
+    /** Weekdays for "weekly": 0 = Sunday ... 6 = Saturday. */
+    days: jsonb("days").$type<number[]>().default([]).notNull(),
+    /** Last day for daily / weekly rides; null = no end. */
+    until: text("until"),
+    notes: text("notes"),
+    status: rideStatusEnum("status").default("active").notNull(),
+    createdAt,
+  },
+  (t) => [index("rides_status_idx").on(t.status)],
+);
+
+/** The route: start, stops in between, end (in order). */
+export const ridePoints = pgTable(
+  "ride_points",
+  {
+    id: serial("id").primaryKey(),
+    rideId: integer("ride_id").notNull().references(() => rides.id, { onDelete: "cascade" }),
+    idx: integer("idx").notNull(),
+    name: text("name").notNull(),
+    lat: doublePrecision("lat").notNull(),
+    lng: doublePrecision("lng").notNull(),
+    /** Key from lib/places.ts when picked from the list. */
+    placeKey: text("place_key"),
+  },
+  (t) => [index("ride_points_ride_idx").on(t.rideId)],
+);
+
+export const rideBookings = pgTable(
+  "ride_bookings",
+  {
+    id: serial("id").primaryKey(),
+    rideId: integer("ride_id").notNull().references(() => rides.id, { onDelete: "cascade" }),
+    /** The day of travel, "YYYY-MM-DD". */
+    date: text("date").notNull(),
+    name: text("name").notNull(),
+    phone: text("phone").notNull(),
+    gender: genderEnum("gender").notNull(),
+    seats: integer("seats").default(1).notNull(),
+    pickupIdx: integer("pickup_idx").notNull(),
+    dropIdx: integer("drop_idx").notNull(),
+    code: text("code").notNull(),
+    createdAt,
+  },
+  (t) => [uniqueIndex("ride_bookings_ride_date_phone_uq").on(t.rideId, t.date, t.phone), index("ride_bookings_ride_date_idx").on(t.rideId, t.date)],
+);
+
+/** Live positions people chose to share. Rows older than a few minutes are ignored. */
+export const livePositions = pgTable(
+  "live_positions",
+  {
+    /** Random id kept by the browser that shares. */
+    id: text("id").primaryKey(),
+    role: text("role").$type<"driver" | "rider">().notNull(),
+    /** Short label: driver's first name, or empty for riders. */
+    label: text("label"),
+    rideId: integer("ride_id").references(() => rides.id, { onDelete: "cascade" }),
+    lat: doublePrecision("lat").notNull(),
+    lng: doublePrecision("lng").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("live_positions_updated_idx").on(t.updatedAt)],
+);
+
+export type Ride = typeof rides.$inferSelect;
+export type RidePoint = typeof ridePoints.$inferSelect;
+export type RideBooking = typeof rideBookings.$inferSelect;
