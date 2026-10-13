@@ -25,12 +25,12 @@ export function RideCard({ ride, pickupIdx, dropIdx, pickupKm, href }: { ride: P
           {next && <div className="mt-1 text-[11px] font-bold uppercase tracking-wide text-brand">{dayWord(next.date)}</div>}
         </div>
         <div className="min-w-0 flex-1 border-l border-slate-100 pl-3">
-          <div className="flex min-w-0 items-center gap-1.5 font-bold">
-            <span className="truncate">{pts[a]?.name}</span>
-            <ArrowRight className="size-4 shrink-0 text-slate-400" />
-            <span className="truncate">{pts[b]?.name}</span>
+          <div className="font-bold leading-snug [overflow-wrap:anywhere]">
+            {pts[a]?.name}
+            <ArrowRight className="mx-1 inline size-4 align-[-3px] text-slate-400" />
+            {pts[b]?.name}
           </div>
-          <div className="truncate text-xs text-slate-500">
+          <div className="mt-0.5 line-clamp-2 text-xs text-slate-500">
             {pts.length > 2 || a > 0 || b < pts.length - 1 ? `Route: ${pts[0].name} → ${pts[pts.length - 1].name} · ` : ""}
             {describeSchedule(ride.schedule)}
           </div>
