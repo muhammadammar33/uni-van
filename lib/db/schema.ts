@@ -230,9 +230,28 @@ export const rideBookings = pgTable(
     boardedAt: timestamp("boarded_at", { withTimezone: true }),
     /** Wrong ride codes typed; the check stops after a few. */
     boardTries: integer("board_tries").default(0).notNull(),
+    /** The driver marked the rider as not at the pickup (so the trip could go on), or null. */
+    noShowAt: timestamp("no_show_at", { withTimezone: true }),
     createdAt,
   },
   (t) => [uniqueIndex("ride_bookings_ride_date_phone_uq").on(t.rideId, t.date, t.phone), index("ride_bookings_ride_date_idx").on(t.rideId, t.date)],
+);
+
+/**
+ * A ride's trip on one day: the last stop the driver has left. The driver can only leave a stop once every
+ * rider getting on there (or before) has entered the ride code, or was marked not there.
+ */
+export const rideTrips = pgTable(
+  "ride_trips",
+  {
+    id: serial("id").primaryKey(),
+    rideId: integer("ride_id").notNull().references(() => rides.id, { onDelete: "cascade" }),
+    date: text("date").notNull(),
+    leftIdx: integer("left_idx").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("ride_trips_ride_date_uq").on(t.rideId, t.date)],
 );
 
 /** Live positions people chose to share. Rows older than a few minutes are ignored. */

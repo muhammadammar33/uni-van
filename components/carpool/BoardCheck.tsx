@@ -70,6 +70,11 @@ export function BoardCheck({ slug, booking, onBoarded }: { slug: string; booking
           <p className="text-sm text-slate-600">Ask the driver for the 4-digit ride code and type it here before you get in.</p>
         </div>
       </div>
+      {booking.noShow && (
+        <p className="rounded-xl bg-amber-50 p-2.5 text-sm text-amber-900" role="status">
+          <b>The driver marked you as not at the pickup.</b> If you&apos;re with them, enter the code now. If not, call the driver.
+        </p>
+      )}
       {!locked && (
         <div className="flex gap-2">
           <input

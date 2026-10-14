@@ -362,6 +362,8 @@ export type RideBookingView = {
   plate: string | null;
   /** The rider checked the driver's ride code in the car. */
   boarded: boolean;
+  /** The driver marked the rider as not at the pickup. */
+  noShow: boolean;
   /** Wrong ride codes left before the check stops. */
   codeTriesLeft: number;
 };
@@ -393,6 +395,7 @@ function bookingView(r: s.Ride, pts: s.RidePoint[], b: s.RideBooking): RideBooki
     car: r.car,
     plate: r.plate,
     boarded: !!b.boardedAt,
+    noShow: !!b.noShowAt,
     codeTriesLeft: Math.max(0, BOARD_TRIES - b.boardTries),
   };
 }
@@ -505,8 +508,62 @@ export async function boardRide(slug: string, phone: string, code: string, rawRi
     const triesLeft = Math.max(0, BOARD_TRIES - row.tries);
     throw new BookingError("That code doesn't match. Don't get in: this may not be the driver you booked.", 400, { code: "wrong_ride_code", triesLeft });
   }
-  const [row] = await db.update(s.rideBookings).set({ boardedAt: new Date() }).where(eq(s.rideBookings.id, b.id)).returning();
+  const [row] = await db.update(s.rideBookings).set({ boardedAt: new Date(), noShowAt: null }).where(eq(s.rideBookings.id, b.id)).returning();
   return bookingView(f.ride, f.pts, row);
+}
+
+export const tripInput = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("leave"), stopIdx: z.number().int().min(0) }),
+  z.object({ action: z.literal("noshow"), bookingId: z.number().int(), undo: z.boolean().optional() }),
+]);
+
+/**
+ * Today's trip, by the driver: leave a stop (only once every rider getting on there or before is on board,
+ * or marked not there), or mark a rider as not at the pickup (from the leaving time).
+ */
+export async function tripAction(token: string, raw: unknown) {
+  const parsed = tripInput.safeParse(raw);
+  if (!parsed.success) throw new BookingError("Check the request");
+  const input = parsed.data;
+  const date = todayLocal();
+  return requireDb().transaction(async (tx) => {
+    const [r] = await tx.select().from(s.rides).where(eq(s.rides.manageToken, token)).for("update");
+    if (!r) throw new BookingError("Ride not found", 404);
+    if (r.status !== "active") throw new BookingError("This ride isn't live.", 409);
+    if (!runsOn(scheduleOf(r), date)) throw new BookingError("This ride doesn't run today.", 409);
+    const today = await tx
+      .select()
+      .from(s.rideBookings)
+      .where(and(eq(s.rideBookings.rideId, r.id), eq(s.rideBookings.date, date)));
+    const [trip] = await tx
+      .select()
+      .from(s.rideTrips)
+      .where(and(eq(s.rideTrips.rideId, r.id), eq(s.rideTrips.date, date)));
+    const leftIdx = trip?.leftIdx ?? -1;
+    if (input.action === "noshow") {
+      const b = today.find((x) => x.id === input.bookingId);
+      if (!b) throw new BookingError("Booking not found", 404);
+      if (b.boardedAt) throw new BookingError(`${b.name} is already on board.`, 409);
+      if (!input.undo && nowLocal().slice(11, 16) < r.departTime) throw new BookingError(`You can mark a rider as not here from ${r.departTime}, the leaving time.`, 409);
+      await tx.update(s.rideBookings).set({ noShowAt: input.undo ? null : new Date() }).where(eq(s.rideBookings.id, b.id));
+      return { leftIdx };
+    }
+    const pts = await tx.select({ idx: s.ridePoints.idx }).from(s.ridePoints).where(eq(s.ridePoints.rideId, r.id));
+    if (input.stopIdx >= pts.length - 1) throw new BookingError("That's the last stop.");
+    if (input.stopIdx <= leftIdx) return { leftIdx };
+    const waiting = today.filter((b) => b.pickupIdx <= input.stopIdx && !b.boardedAt && !b.noShowAt);
+    if (waiting.length)
+      throw new BookingError(
+        `Waiting for ${waiting.map((b) => b.name).join(", ")} to enter the ride code. Tell them the code, or mark them as not here.`,
+        409,
+        { code: "riders_waiting", waiting: waiting.map((b) => b.id) },
+      );
+    await tx
+      .insert(s.rideTrips)
+      .values({ rideId: r.id, date, leftIdx: input.stopIdx })
+      .onConflictDoUpdate({ target: [s.rideTrips.rideId, s.rideTrips.date], set: { leftIdx: input.stopIdx, updatedAt: new Date() } });
+    return { leftIdx: input.stopIdx };
+  });
 }
 
 /* ---------- Driver reviews ---------- */
@@ -558,7 +615,15 @@ export async function manageRide(token: string) {
       .orderBy(asc(s.rideBookings.date), asc(s.rideBookings.pickupIdx)),
   ]);
   const runs = r.status === "active" ? upcomingRuns(r, 14) : [];
-  const [ratings, reviews, ident] = await Promise.all([ratingsFor([r.driverPhone]), reviewsFor(r.driverPhone, 20), identityByPhone(r.driverPhone)]);
+  const [ratings, reviews, ident, [trip]] = await Promise.all([
+    ratingsFor([r.driverPhone]),
+    reviewsFor(r.driverPhone, 20),
+    identityByPhone(r.driverPhone),
+    db
+      .select()
+      .from(s.rideTrips)
+      .where(and(eq(s.rideTrips.rideId, r.id), eq(s.rideTrips.date, todayLocal()))),
+  ]);
   return {
     ride: r,
     idCheck: ident ? { status: ident.driverStatus, submittedAt: ident.submittedAt.toISOString(), rejectReason: ident.rejectReason } : null,
@@ -577,7 +642,10 @@ export async function manageRide(token: string) {
       drop: pts[b.dropIdx]?.name ?? "",
       pickupIdx: b.pickupIdx,
       boarded: !!b.boardedAt,
+      noShow: !!b.noShowAt,
     })),
+    /** Today's trip: the last stop left (-1 before starting), or null when the ride doesn't run today. */
+    trip: runs.includes(todayLocal()) || bookings.some((b) => b.date === todayLocal()) ? { date: todayLocal(), leftIdx: trip?.leftIdx ?? -1 } : null,
     /** The code to tell riders as they get in, for each upcoming day. */
     rideCodes: Object.fromEntries([...new Set([...runs.slice(0, 7), ...bookings.map((b) => b.date)])].map((d) => [d, rideCode(r.id, d)])),
   };

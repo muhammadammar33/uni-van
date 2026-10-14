@@ -64,6 +64,13 @@
       "when": 1791975525140,
       "tag": "0008_ride_codes",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791976683247,
+      "tag": "0009_ride_trips",
+      "breakpoints": true
     }
   ]
 }

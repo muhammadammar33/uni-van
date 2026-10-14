@@ -7,6 +7,7 @@ import { CircleCheckBig, Clock, Copy, KeyRound, MessageCircle, MessageSquareHear
 import { CopyButton } from "@/components/admin/CopyButton";
 import { MapView } from "@/components/carpool/MapView";
 import { rememberRide, RideForm, type RideFormValues } from "@/components/carpool/RideForm";
+import { TripPanel } from "@/components/carpool/TripPanel";
 import { deviceId, useMyLocation } from "@/components/carpool/useMyLocation";
 import { useIdVerify, verifyBy } from "@/components/carpool/IdVerify";
 import { Stars } from "@/components/carpool/Stars";
@@ -187,6 +188,8 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
           )}
         </div>
       </section>
+
+      <TripPanel token={token} data={data} />
 
       {ride.status === "active" && (
         <section className="card space-y-3">
