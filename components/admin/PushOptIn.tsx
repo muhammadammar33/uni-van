@@ -38,7 +38,13 @@ export function PushOptIn({ title = "Get notified when someone sends their ID" }
       setState("on");
     } catch {
       setState("off");
-      setMsg("Couldn't turn notifications on here. On iPhone, first add Hamsafar to your Home Screen (Share → Add to Home Screen), then open it from there.");
+      // Brave turns off the push service browsers use for website notifications, unless the person allows it.
+      const brave = "brave" in navigator;
+      setMsg(
+        brave
+          ? "Brave blocks website notifications by default: open brave://settings/privacy, turn on “Use Google services for push messaging”, restart Brave, then try again."
+          : "Couldn't turn notifications on here. On iPhone, first add Hamsafar to your Home Screen (Share → Add to Home Screen), then open it from there.",
+      );
     }
   }
 
