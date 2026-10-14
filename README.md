@@ -2,13 +2,29 @@
 
 Live at **[hamsafar.website](https://hamsafar.website)**.
 
-**Right now Hamsafar is a carpool site for the Wah Cantt – Islamabad – Rawalpindi – Rawat corridor.** Drivers offer the empty seats in their car without signing up; riders search by pickup and drop-off and book a seat. The organisations platform described further down (vans, universities, tours, companies) is still in the code and still works, but it's hidden from the home page for now.
+**Right now Hamsafar is a carpool site: city rides across Islamabad, Rawalpindi, Wah, Taxila and Rawat, and rides between cities all over Pakistan.** Drivers offer the empty seats in their car without signing up; riders search by pickup and drop-off and book a seat. The organisations platform described further down (vans, universities, tours, companies) is still in the code and still works, but it's hidden from the home page for now.
 
 ## Carpool
 
+### City rides and rides between cities
+
+- **In the city**: every point is within Islamabad, Rawalpindi, Wah, Taxila and Rawat (`CITY_AREA` in `lib/cities.ts`), chosen from about 80 local places or a pin. Riders match when the route passes within about **3 km** of their pickup and drop-off.
+- **Between cities**: any of about 100 towns across Pakistan (by province), plus the local spots for an exact pickup. Riders match when their pickup and drop-off are within about **25 km of one of the ride's stops**, in order, so drivers should add the cities they pass (e.g. Islamabad, Jhelum, Gujranwala, Lahore).
+- A city ride with a point outside the area, or an intercity ride entirely inside it, is refused with a hint to switch. Search, the offer form and ride cards all show which kind it is (`?kind=intercity`; old links without it are guessed from the places).
+
+### ID verification (CNIC, licence, selfie)
+
+- **Drivers, first ride**: photos of the CNIC front and back, driving licence and a selfie, plus their details (read from the CNIC by an on-phone scan, then confirmed), the licence number, issuing authority and expiry, and the car's registration number. The ride is saved as **"waiting for ID check"** and goes live by itself the moment an admin approves. **Later rides**: they only type their CNIC number, which must match the one registered with that phone.
+- **Riders, first booking**: CNIC front, back and a selfie. Under 18: their **B-form** and a **parent's CNIC** (front and back) plus a selfie. Riders can book while their ID is being checked. Their gender comes from the ID (women-only rides rely on it), and so does a driver's.
+- Hard rules: expired CNIC or licence, drivers under 18, B-form at 18+, one ID number per phone. Soft warnings for the reviewer: the CNIC's gender digit doesn't match, or the scan read a different number or name.
+- People are told it's checked **within 24 hours**. Admins get an instant notification (web push to their phone or computer, turned on from **Admin → Verifications**; optionally WhatsApp, see below), and the list counts down the hours left.
+- **Admin → Verifications** (super admins): waiting / approved / turned down, search by name, CNIC, parent's CNIC or phone, each person's photos, details, rides and bookings, links to the official licence and vehicle checks (NADRA has no public API, so the CNIC is checked by eye against the selfie), approve or turn down with a reason, and delete someone's ID data. Every photo view is logged.
+- Photos are encrypted (AES-256-GCM) in the database and only super admins can open them. Approved drivers get an "ID verified" badge. `/privacy` explains all of this.
+- **Share my trip**: a rider's ticket has a button that sends family the driver, car, number plate, trip and a link where they can follow the car live.
+
 ### Drivers (no account)
 
-1. **Offer a ride** (`/offer`): starting point, any stops on the way, final destination. Each comes from the list of about 75 common places from Wah Cantt to Rawat, or from "use my current location", or from a pin dropped on the map.
+1. **Offer a ride** (`/offer`, or `/offer?kind=intercity`): in the city or between cities, then the starting point, any stops on the way, final destination. Each comes from the list of places (or cities), or from "use my current location", or from a pin dropped on the map.
 2. When: **one day**, **every day**, or **chosen days of the week** (e.g. Mon – Fri), with an optional end date and the leaving time.
 3. Car, number plate, seats, fare per seat, who can ride (anyone / women only / men only), a note, and the driver's name, WhatsApp number and gender.
 4. Publishing gives the driver a **private link** (`/r/manage/<token>`), which they can also send to their own WhatsApp. It shows who booked each day (call / WhatsApp / remove) and lets them edit, pause, resume or cancel the ride and share their live location while driving. The link is the only key: anyone who has it can manage the ride. This browser also remembers the rides it created ("Your rides" on the home page).
@@ -16,7 +32,7 @@ Live at **[hamsafar.website](https://hamsafar.website)**.
 ### Riders (no account)
 
 1. Search (`/` or `/search`) with a pickup and a drop-off (from the list, current location, or a pin) and optionally a day.
-2. A ride matches when its route passes within about **3 km** of both points, **in the right direction**. Each result shows where to get on and off and how far the pickup is.
+2. A city ride matches when its route passes within about **3 km** of both points, **in the right direction** (between cities: within 25 km of its stops). Each result shows where to get on and off and how far the pickup is.
 3. The ride page (`/r/<slug>`) shows the route on a map and the driver's live position. Book with name, phone and gender. The booking shows the driver's number with one-tap WhatsApp (message already written) and call. A seat can be cancelled from the same browser or with phone + booking code.
 4. Rules: no double booking (locked transaction), one booking per phone per day, women-only / men-only rides enforced, seats can't be cut below what's already booked, and the route is locked once riders have booked.
 
@@ -58,16 +74,18 @@ Setup ([Meta for Developers](https://developers.facebook.com/) → create an app
 | Path | Purpose |
 | --- | --- |
 | `/` | Search, "rides leaving soon", your rides, live map |
-| `/search?from=&to=&date=` | Matching rides on a map |
+| `/search?from=&to=&date=&kind=` | Matching rides on a map |
 | `/offer` | Offer a ride |
 | `/r/<slug>` | Public ride page and booking (the link to share) |
 | `/r/manage/<token>` | Driver's private page, with their rating |
 | `/feedback` | Send feedback to the Hamsafar team |
+| `/privacy` | Privacy notice (ID checks, location, phone numbers) |
+| `/admin/verifications` | Super admin: ID checks, notifications |
 | `/admin/rides` | Super admin: all carpool rides |
 | `/admin/feedback` | Super admin: feedback messages and driver reviews |
-| `GET/POST /api/rides`, `/api/rides/<slug>[/book\|/lookup\|/cancel\|/review]`, `/api/rides/manage/<token>`, `/api/live`, `POST /api/feedback` | JSON API used by the pages |
+| `GET/POST /api/rides`, `/api/rides/<slug>[/book\|/lookup\|/cancel\|/review]`, `/api/rides/manage/<token>`, `/api/live`, `POST /api/feedback`, `POST /api/identity`, `GET /api/identity/status`, `/api/admin/id-docs/<id>`, `/api/admin/push` | JSON API used by the pages |
 
-The places list is in `lib/places.ts`, route matching in `lib/geo.ts` and schedules in `lib/schedule.ts` (`npm test` covers them). The maps are OpenStreetMap tiles drawn with Leaflet, and place names for dropped pins come from Nominatim. Neither needs an API key.
+The places list is in `lib/places.ts`, the cities in `lib/cities.ts`, ID rules and the card scan parser in `lib/identityRules.ts`, route matching in `lib/geo.ts` and schedules in `lib/schedule.ts` (`npm test` covers them). The maps are OpenStreetMap tiles drawn with Leaflet, and place names for dropped pins come from Nominatim. Neither needs an API key.
 
 ## Organisations platform (hidden for now)
 

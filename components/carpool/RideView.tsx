@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Car, CircleAlert, CircleCheckBig, Clock, MessageCircle, MessageSquareWarning, Phone, Radio, Share2, Star, Users, X } from "lucide-react";
 import { MapView, type MapMarker } from "@/components/carpool/MapView";
+import { useIdVerify } from "@/components/carpool/IdVerify";
 import { usePhoneVerify, VerifiedHint } from "@/components/carpool/PhoneVerify";
 import { RateDriver } from "@/components/carpool/RateDriver";
-import { RatingBadge, Stars } from "@/components/carpool/Stars";
+import { RatingBadge, Stars, VerifiedBadge } from "@/components/carpool/Stars";
+import { ShareTrip } from "@/components/carpool/ShareTrip";
 import { useMyLocation } from "@/components/carpool/useMyLocation";
 import { GenderIcon } from "@/components/SeatMap";
 import { displayPhone, formatDate, formatFare, formatTime, normalizePhone, todayLocal } from "@/lib/format";
@@ -31,6 +33,7 @@ const dayWord = (d: string) => (d === todayLocal() ? "Today" : d === addDays(tod
 export function RideView({ slug, initial, start, verify = null }: { slug: string; initial: PublicRide; start: { date?: string; p?: number; d?: number }; verify?: VerifyMode }) {
   const [ride, setRide] = useState(initial);
   const phoneCheck = usePhoneVerify(verify);
+  const idCheck = useIdVerify();
   const loc = useMyLocation();
   const [driver, setDriver] = useState<LivePosition | null>(null);
   const open = ride.runs.filter((r) => r.left > 0);
@@ -120,7 +123,20 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
       localStorage.setItem(PROFILE, JSON.stringify({ name, phone, gender }));
     } catch {}
     try {
-      const r = await post<{ booking: RideBookingView }>(`/api/rides/${slug}/book`, { date, name, phone, gender, seats, pickupIdx: pickup, dropIdx: drop, phoneToken });
+      const body = { date, name, phone, gender, seats, pickupIdx: pickup, dropIdx: drop, phoneToken };
+      const send = async () => {
+        const res = await fetch(`/api/rides/${slug}/book`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+        return { res, json: await res.json().catch(() => ({})) };
+      };
+      let { res, json } = await send();
+      // First booking (or ID turned down): the one-time ID check, then the booking goes through.
+      if (res.status === 403 && (json.code === "id_required" || json.code === "id_rejected")) {
+        const st = await idCheck.ensure("rider", { phone, phoneToken: phoneToken || undefined, name, gender }, json.idStatus);
+        if (!st) throw new Error("Verify your ID once to book. It takes about a minute.");
+        ({ res, json } = await send());
+      }
+      if (!res.ok) throw new Error(json.error ?? "Something went wrong. Please try again.");
+      const r = json as { booking: RideBookingView };
       try {
         localStorage.setItem(bookingKey(slug), JSON.stringify({ phone: r.booking.phone, code: r.booking.code }));
       } catch {}
@@ -202,7 +218,7 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
       {past && <RateDriver slug={slug} booking={past.booking} review={past.review} onSaved={(review) => { setPast({ ...past, review }); refresh(); }} />}
 
       {booking ? (
-        <Ticket booking={booking} onCancel={cancel} busy={busy} />
+        <Ticket booking={booking} onCancel={cancel} busy={busy} slug={slug} verified={ride.verified} />
       ) : ride.status !== "active" ? (
         <div className="card text-center font-semibold">{ride.status === "paused" ? "The driver has paused this ride for now." : "This ride was cancelled by the driver."}</div>
       ) : open.length === 0 ? (
@@ -304,6 +320,7 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
           </button>
           <p className="text-center text-xs text-slate-500">You get the driver&apos;s number after booking. Your number is shown only to the driver.</p>
           {phoneCheck.dialog}
+          {idCheck.dialog}
         </form>
       )}
 
@@ -311,6 +328,7 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
         <div className="flex flex-wrap items-center gap-2">
           <GenderIcon gender={ride.driverGender} className={`size-4 ${ride.driverGender === "female" ? "text-female" : "text-male"}`} />
           <b>{ride.driverName}</b> <span className="text-slate-500">is driving</span>
+          {ride.verified && <VerifiedBadge />}
           <RatingBadge rating={ride.rating} className="ml-auto" />
         </div>
         <div className="flex items-center gap-2 text-slate-600">
@@ -346,7 +364,7 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
   );
 }
 
-function Ticket({ booking, onCancel, busy }: { booking: RideBookingView; onCancel: () => void; busy: boolean }) {
+function Ticket({ booking, onCancel, busy, slug, verified }: { booking: RideBookingView; onCancel: () => void; busy: boolean; slug: string; verified: boolean }) {
   const msg = `Assalam o Alaikum ${booking.driverName.split(" ")[0]}, I booked ${booking.seats > 1 ? `${booking.seats} seats` : "a seat"} on your Hamsafar ride on ${formatDate(booking.date)}: ${booking.pickup} → ${booking.drop} at ${formatTime(booking.departTime)}. Name: ${booking.name}. Code ${booking.code}.`;
   return (
     <section className="animate-rise overflow-hidden rounded-3xl bg-white shadow-lift">
@@ -392,6 +410,7 @@ function Ticket({ booking, onCancel, busy }: { booking: RideBookingView; onCance
               <Phone className="size-4" /> Call
             </a>
           </div>
+          <ShareTrip booking={booking} slug={slug} verified={verified} />
         </div>
       </dl>
       <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3">

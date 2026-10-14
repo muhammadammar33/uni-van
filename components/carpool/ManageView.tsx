@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CircleCheckBig, Copy, MessageCircle, MessageSquareHeart, Navigation, Pause, Pencil, Phone, Play, Radio, Send, Star, Trash2, X } from "lucide-react";
+import { CircleCheckBig, Clock, Copy, MessageCircle, MessageSquareHeart, Navigation, Pause, Pencil, Phone, Play, Radio, Send, Star, Trash2, X } from "lucide-react";
 import { CopyButton } from "@/components/admin/CopyButton";
 import { MapView } from "@/components/carpool/MapView";
 import { rememberRide, RideForm, type RideFormValues } from "@/components/carpool/RideForm";
 import { deviceId, useMyLocation } from "@/components/carpool/useMyLocation";
+import { useIdVerify, verifyBy } from "@/components/carpool/IdVerify";
 import { Stars } from "@/components/carpool/Stars";
 import { GenderIcon } from "@/components/SeatMap";
 import { displayPhone, formatDate, formatFare, formatTime, todayLocal } from "@/lib/format";
@@ -94,6 +95,7 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
   const shareText = `🚗 Carpool: ${title}\n🕒 ${formatTime(ride.departTime)} · ${describeSchedule({ kind: ride.schedule, date: ride.date, days: ride.days, until: ride.until })}\n${ride.fare !== null ? `💵 ${formatFare(ride.fare)} per seat\n` : ""}Book a seat 👉 ${rideUrl}`;
 
   const formValues: RideFormValues = {
+    kind: ride.kind,
     driverName: ride.driverName,
     driverPhone: displayPhone(ride.driverPhone),
     driverGender: ride.driverGender,
@@ -128,8 +130,10 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
           <div className="bg-hero flex items-center gap-3 px-5 py-4 text-white">
             <CircleCheckBig className="size-10 shrink-0 animate-pop text-emerald-300" />
             <div>
-              <div className="text-lg font-extrabold">Your ride is live!</div>
-              <div className="text-sm text-teal-50/90">Riders searching your route can book now.</div>
+              <div className="text-lg font-extrabold">{ride.status === "pending" ? "Your ride is saved!" : "Your ride is live!"}</div>
+              <div className="text-sm text-teal-50/90">
+                {ride.status === "pending" ? "It goes live by itself once your ID is approved." : "Riders searching your route can book now."}
+              </div>
             </div>
           </div>
           <div className="space-y-3 p-5 text-sm">
@@ -145,13 +149,14 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
         </section>
       )}
       {saved && <p className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">Changes saved.</p>}
+      <IdCheckBanner data={data} />
 
       <section className="card space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${ride.status === "active" ? "bg-emerald-100 text-emerald-800" : ride.status === "paused" ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-600"}`}
+            className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${ride.status === "active" ? "bg-emerald-100 text-emerald-800" : ride.status === "paused" || ride.status === "pending" ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-600"}`}
           >
-            {ride.status === "active" ? "● Live" : ride.status === "paused" ? "Paused" : "Cancelled"}
+            {ride.status === "active" ? "● Live" : ride.status === "paused" ? "Paused" : ride.status === "pending" ? "Waiting for ID check" : "Cancelled"}
           </span>
           <span className="text-sm text-slate-500">
             {formatTime(ride.departTime)} · {describeSchedule({ kind: ride.schedule, date: ride.date, days: ride.days, until: ride.until })} · {ride.seats} seats
@@ -316,5 +321,41 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
         </p>
       )}
     </div>
+  );
+}
+
+/** Where the driver's ID check stands: waiting (with the time it should be done by), or turned down. */
+function IdCheckBanner({ data }: { data: ManageData }) {
+  const router = useRouter();
+  const idCheck = useIdVerify();
+  const c = data.idCheck;
+  if (!c || (c.status !== "pending" && c.status !== "rejected")) return null;
+  if (c.status === "pending")
+    return (
+      <section className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <Clock className="mt-0.5 size-5 shrink-0" />
+        <p>
+          <b>We&apos;re checking your ID</b>: done within 24 hours (by {verifyBy(c.submittedAt)}).{" "}
+          {data.ride.status === "pending" ? "This ride goes live by itself as soon as you're approved." : ""}
+        </p>
+      </section>
+    );
+  return (
+    <section className="space-y-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+      <p>
+        <b>Your ID wasn&apos;t approved</b>: {c.rejectReason ?? "please send it again"}. Riders can&apos;t book this ride until it is.
+      </p>
+      <button
+        type="button"
+        className="btn-primary"
+        onClick={async () => {
+          const st = await idCheck.ensure("driver", { phone: data.ride.driverPhone, name: data.ride.driverName, gender: data.ride.driverGender });
+          if (st) router.refresh();
+        }}
+      >
+        Send my ID again
+      </button>
+      {idCheck.dialog}
+    </section>
   );
 }

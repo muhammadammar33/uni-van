@@ -4,18 +4,26 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, CircleAlert, Plus, Trash2 } from "lucide-react";
 import { MapView } from "@/components/carpool/MapView";
+import { useIdVerify } from "@/components/carpool/IdVerify";
 import { usePhoneVerify, VerifiedHint } from "@/components/carpool/PhoneVerify";
+import { KindTabs } from "@/components/carpool/KindTabs";
 import { PlacePicker } from "@/components/carpool/PlacePicker";
 import { GenderIcon } from "@/components/SeatMap";
 import { normalizePhone, todayLocal } from "@/lib/format";
+import { cleanIdNumber } from "@/lib/identityRules";
 import type { Gender } from "@/lib/layout";
+import type { RideKind } from "@/lib/cities";
 import type { Point } from "@/lib/places";
 import { WEEKDAYS } from "@/lib/schedule";
 import type { VerifyMode } from "@/lib/verify";
 
 export type RideFormValues = {
+  /** In the city (Islamabad, Rawalpindi, Wah, Taxila, Rawat) or between cities. */
+  kind: RideKind;
   driverName: string;
   driverPhone: string;
+  /** Asked every time a ride is offered; must match the CNIC registered with this phone. Never remembered. */
+  driverCnic?: string;
   driverGender: Gender | null;
   car: string;
   plate: string;
@@ -31,9 +39,11 @@ export type RideFormValues = {
   points: (Point | null)[];
 };
 
-export const emptyRide = (): RideFormValues => ({
+export const emptyRide = (kind: RideKind = "city"): RideFormValues => ({
+  kind,
   driverName: "",
   driverPhone: "",
+  driverCnic: "",
   driverGender: null,
   car: "",
   plate: "",
@@ -71,8 +81,11 @@ export function RideForm({
   lockedRoute = false,
   onSaved,
   verify = null,
+  kind = "city",
 }: {
   initial?: RideFormValues;
+  /** The kind a new ride starts as (/offer?kind=intercity). */
+  kind?: RideKind;
   token?: string;
   lockedRoute?: boolean;
   /** Called after an edit is saved (before the page refreshes). */
@@ -82,7 +95,8 @@ export function RideForm({
 }) {
   const router = useRouter();
   const phoneCheck = usePhoneVerify(verify);
-  const [v, setV] = useState<RideFormValues>(() => initial ?? emptyRide());
+  const idCheck = useIdVerify();
+  const [v, setV] = useState<RideFormValues>(() => initial ?? emptyRide(kind));
   // A returning driver's details, remembered on this phone.
   useEffect(() => {
     if (initial) return;
@@ -105,17 +119,31 @@ export function RideForm({
     if (!v.driverGender) return setError("Choose male or female.");
     // New rides, and edits that change the number, need a verified WhatsApp number.
     const phoneChanged = !initial || normalizePhone(initial.driverPhone) !== normalizePhone(v.driverPhone);
+    if (phoneChanged && !cleanIdNumber(v.driverCnic ?? "")) return setError("Enter your 13-digit CNIC number.");
     const phoneToken = phoneChanged ? await phoneCheck.ensure(v.driverPhone) : "";
     if (phoneToken === null) return setError(normalizePhone(v.driverPhone) ? "Verify your WhatsApp number to publish." : "Enter a valid phone number, e.g. 0300 1234567");
     setBusy(true);
     try {
       const body = { ...v, fare: v.fare.trim() === "" ? "" : Number(v.fare), until: v.until || "", points: route, phoneToken };
-      const res = await fetch(token ? `/api/rides/manage/${token}` : "/api/rides", {
-        method: token ? "PATCH" : "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const json = await res.json().catch(() => ({}));
+      const send = async () => {
+        const res = await fetch(token ? `/api/rides/manage/${token}` : "/api/rides", {
+          method: token ? "PATCH" : "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        return { res, json: await res.json().catch(() => ({})) };
+      };
+      let { res, json } = await send();
+      // First ride (or ID turned down): the one-time ID check, then the ride is saved without retyping anything.
+      if (res.status === 403 && (json.code === "id_required" || json.code === "id_rejected")) {
+        const st = await idCheck.ensure(
+          "driver",
+          { phone: v.driverPhone, phoneToken: phoneToken || undefined, name: v.driverName, gender: v.driverGender, cnic: v.driverCnic },
+          json.idStatus,
+        );
+        if (!st) throw new Error("Verify your ID to offer rides. It takes about 2 minutes, once.");
+        ({ res, json } = await send());
+      }
       if (!res.ok) throw new Error(json.error ?? "Couldn't save. Please try again.");
       try {
         localStorage.setItem("hamsafar:driver", JSON.stringify({ driverName: v.driverName, driverPhone: v.driverPhone, driverGender: v.driverGender, car: v.car, plate: v.plate }));
@@ -138,6 +166,15 @@ export function RideForm({
     <form onSubmit={submit} className="space-y-5">
       <section className="card space-y-4">
         <h2 className="text-lg font-bold">Route</h2>
+        <KindTabs
+          value={v.kind}
+          disabled={lockedRoute}
+          // The places differ between the two, so the route starts again.
+          onChange={(k) => k !== v.kind && set({ kind: k, points: [null, null] })}
+        />
+        <p className="-mt-2 text-xs text-slate-500">
+          {v.kind === "city" ? "Within Islamabad, Rawalpindi, Wah, Taxila and Rawat." : "From one city to another, anywhere in Pakistan."}
+        </p>
         {lockedRoute && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Riders have booked upcoming days, so the route is locked. You can still change the time, seats, fare and notes.</p>}
         <div className="space-y-3">
           {v.points.map((p, i) => {
@@ -150,8 +187,9 @@ export function RideForm({
                     label={first ? "Starting point" : last ? "Final destination" : `Stop ${i}`}
                     icon={first ? "start" : last ? "end" : "stop"}
                     value={p}
+                    scope={v.kind}
                     onChange={(x) => !lockedRoute && setPoint(i, x)}
-                    placeholder={first ? "Where do you start?" : last ? "Where do you end?" : "A place you pass on the way"}
+                    placeholder={first ? "Where do you start?" : last ? "Where do you end?" : v.kind === "city" ? "A place you pass on the way" : "A city you pass on the way"}
                   />
                 </div>
                 {!first && !last && !lockedRoute && (
@@ -176,7 +214,11 @@ export function RideForm({
             <Plus className="size-4" /> Add a stop on the way
           </button>
         )}
-        <p className="text-xs text-slate-500">Add the places you pass, so riders along the way find your ride. Riders within about 3 km of your route can join.</p>
+        <p className="text-xs text-slate-500">
+          {v.kind === "city"
+            ? "Add the places you pass, so riders along the way find your ride. Riders within about 3 km of your route can join."
+            : "Add the cities you pass (e.g. Islamabad, Jhelum, Gujranwala, Lahore), so riders on the way find your ride. Riders within about 25 km of a stop can join."}
+        </p>
         {route.length > 0 && <MapView className="h-56" routes={[{ points: route }]} fitKey={route.map((p) => `${p.lat},${p.lng}`).join(";")} />}
       </section>
 
@@ -324,6 +366,23 @@ export function RideForm({
             <VerifiedHint mode={verify} phone={v.driverPhone} />
           </div>
         </div>
+        {(!initial || normalizePhone(initial.driverPhone) !== normalizePhone(v.driverPhone)) && (
+          <div>
+            <label className="label" htmlFor="driverCnic">
+              CNIC number <span className="font-normal text-slate-400">(never shown to riders)</span>
+            </label>
+            <input
+              id="driverCnic"
+              className="input"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="12345-1234567-1"
+              value={v.driverCnic ?? ""}
+              onChange={(e) => set({ driverCnic: e.target.value })}
+            />
+            <p className="mt-1 text-xs text-slate-500">First time? We&apos;ll also ask for photos of your CNIC, licence and a selfie (about 2 minutes, once).</p>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           {(["female", "male"] as const).map((g) => (
             <button
@@ -350,6 +409,7 @@ export function RideForm({
         {busy ? "Saving…" : token ? "Save changes" : "Publish my ride"}
       </button>
       {!token && <p className="text-center text-xs text-slate-500">No account needed. You get a private link to manage your ride: keep it safe.</p>}
+      {idCheck.dialog}
       {phoneCheck.dialog}
     </form>
   );

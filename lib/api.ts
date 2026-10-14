@@ -7,7 +7,7 @@ export async function handle(fn: () => Promise<unknown>) {
   try {
     return NextResponse.json(await fn());
   } catch (err) {
-    if (err instanceof BookingError) return NextResponse.json({ error: err.message }, { status: err.status });
+    if (err instanceof BookingError) return NextResponse.json({ error: err.message, ...err.extra }, { status: err.status });
     console.error(err);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }

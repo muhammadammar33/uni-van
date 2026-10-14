@@ -8,6 +8,7 @@ import { Logo } from "@/components/Logo";
 import { formatDate } from "@/lib/format";
 import { decodePoint, encodePoint } from "@/lib/places";
 import { searchRides } from "@/lib/rides";
+import { kindFor } from "@/lib/cities";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Find a ride" };
@@ -18,13 +19,15 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   const from = decodePoint(str("from"));
   const to = decodePoint(str("to"));
   const date = str("date") && /^\d{4}-\d{2}-\d{2}$/.test(str("date")!) ? str("date")! : null;
-  const rides = await searchRides(from, to, date);
+  const kind = kindFor(str("kind"), from, to);
+  const rides = await searchRides(from, to, date, kind);
   const keep = (r: { pickupIdx: number; dropIdx: number }) => {
     const q = new URLSearchParams();
     if (date) q.set("date", date);
     q.set("p", String(r.pickupIdx));
     q.set("d", String(r.dropIdx));
     if (from) q.set("from", encodePoint(from));
+    if (kind === "intercity") q.set("kind", kind);
     return q.toString();
   };
 
@@ -42,7 +45,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
       </header>
       <main className="mx-auto grid max-w-5xl gap-6 px-4 py-6 lg:grid-cols-[22rem_1fr] [&>*]:min-w-0">
         <div className="lg:sticky lg:top-4 lg:self-start">
-          <SearchBox key={`${str("from")}|${str("to")}|${date}`} from={from} to={to} date={date ?? ""} />
+          <SearchBox key={`${str("from")}|${str("to")}|${date}|${kind}`} from={from} to={to} date={date ?? ""} kind={kind} />
         </div>
         <div className="space-y-4">
           <Link href="/" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-ink lg:hidden">
@@ -61,6 +64,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
               <span className="font-semibold text-slate-500"> to {to.name}</span>
             ) : null}
             {date && <span className="font-semibold text-slate-500"> · {formatDate(date)}</span>}
+            {kind === "intercity" && <span className="font-semibold text-slate-500"> · between cities</span>}
           </h1>
           {(from || to) && <SearchMap from={from} to={to} routes={rides.slice(0, 8).map((r) => ({ points: r.points, highlight: [r.pickupIdx, r.dropIdx] as [number, number] }))} />}
           {rides.length ? (

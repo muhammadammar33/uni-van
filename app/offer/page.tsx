@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Offer a ride", description: "Fill the empty seats in your car. No sign-up." };
 
-export default function OfferPage() {
+export default async function OfferPage({ searchParams }: PageProps<"/offer">) {
+  const kind = (await searchParams).kind === "intercity" ? "intercity" : "city";
   return (
     <div className="min-h-dvh pb-16">
       <header className="bg-hero px-4 pb-16 pt-4 text-white">
@@ -26,7 +27,7 @@ export default function OfferPage() {
         <Link href="/" className="mb-3 inline-flex items-center gap-1 text-sm text-white/90 hover:text-white">
           <ArrowLeft className="size-4" /> Back
         </Link>
-        <RideForm verify={verifyMode()} />
+        <RideForm verify={verifyMode()} kind={kind} />
       </main>
     </div>
   );

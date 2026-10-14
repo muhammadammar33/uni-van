@@ -1,4 +1,4 @@
-import { Star } from "lucide-react";
+import { BadgeCheck, Star } from "lucide-react";
 import type { DriverRating } from "@/lib/rides";
 
 /** Five stars, filled up to `value` (rounded to the nearest half is not worth it: whole stars read clearer). */
@@ -21,6 +21,16 @@ export function RatingBadge({ rating, className = "" }: { rating: DriverRating |
       <Star className="size-4 fill-amber-400 text-amber-400" aria-hidden />
       {rating.avg.toFixed(1)}
       <span className="font-medium text-slate-400">({rating.count})</span>
+    </span>
+  );
+}
+
+/** The driver's CNIC and licence were checked by the Hamsafar team. */
+export function VerifiedBadge({ compact = false }: { compact?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700" title="CNIC and driving licence checked by Hamsafar">
+      <BadgeCheck className="size-3.5" />
+      {compact ? "Verified" : "ID verified"}
     </span>
   );
 }

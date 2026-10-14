@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, Car, Footprints, Users } from "lucide-react";
-import { RatingBadge } from "@/components/carpool/Stars";
+import { RatingBadge, VerifiedBadge } from "@/components/carpool/Stars";
 import { GenderIcon } from "@/components/SeatMap";
 import { formatDate, formatFare, formatTime, todayLocal } from "@/lib/format";
 import { formatKm } from "@/lib/geo";
@@ -41,6 +41,7 @@ export function RideCard({ ride, pickupIdx, dropIdx, pickupKm, href }: { ride: P
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-sm text-slate-600">
         <span className="flex items-center gap-1.5 font-medium text-ink">
           <GenderIcon gender={ride.driverGender} className={`size-4 ${ride.driverGender === "female" ? "text-female" : "text-male"}`} /> {ride.driverName}
+          {ride.verified && <VerifiedBadge compact />}
           {ride.rating && <RatingBadge rating={ride.rating} className="ml-0.5" />}
         </span>
         <span className="flex min-w-0 items-center gap-1.5">
@@ -51,7 +52,8 @@ export function RideCard({ ride, pickupIdx, dropIdx, pickupKm, href }: { ride: P
             <Users className="size-4" /> {next.left === 0 ? "Full" : `${next.left} seat${next.left === 1 ? "" : "s"} left`}
           </span>
         )}
-        {pickupKm !== undefined && pickupKm > 0.15 && (
+        {ride.kind === "intercity" && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700">Between cities</span>}
+        {pickupKm !== undefined && pickupKm > 0.15 && ride.kind === "city" && (
           <span className="flex items-center gap-1.5">
             <Footprints className="size-4" /> {formatKm(pickupKm)} from you
           </span>

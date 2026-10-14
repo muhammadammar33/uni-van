@@ -64,3 +64,16 @@ export function blur(p: LatLng): LatLng {
 export function formatKm(km: number): string {
   return km < 1 ? `${Math.round(km * 1000 / 50) * 50} m` : `${km.toFixed(1)} km`;
 }
+
+/**
+ * For rides between cities: the rider's pickup and drop-off must each be within `radiusKm` of one of the
+ * ride's stops (not anywhere along the road between two cities), pickup stop first.
+ */
+export function matchStops(route: LatLng[], from: LatLng, to: LatLng, radiusKm = 25): RouteMatch | null {
+  const a = nearestIndex(route, from);
+  const b = nearestIndex(route, to);
+  const pickupKm = distanceKm(route[a], from);
+  const dropKm = distanceKm(route[b], to);
+  if (pickupKm > radiusKm || dropKm > radiusKm || b <= a) return null;
+  return { pickupKm, dropKm, pickupPos: a, dropPos: b };
+}

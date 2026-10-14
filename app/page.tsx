@@ -14,13 +14,16 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: `${BRAND.name}: carpool from Wah Cantt to Rawat`,
-  description: "Find a seat in a car going your way across Islamabad and Rawalpindi, or offer the empty seats in yours. No sign-up.",
+  description: "Find a seat in a car going your way across Islamabad and Rawalpindi, or between cities all over Pakistan. Or offer the empty seats in yours.",
 };
 
 async function soon(): Promise<SearchResult[]> {
   if (!db) return [];
   try {
-    return (await searchRides(null, null, null)).slice(0, 6);
+    const [city, intercity] = await Promise.all([searchRides(null, null, null, "city"), searchRides(null, null, null, "intercity")]);
+    return [...city, ...intercity]
+      .sort((a, b) => a.runs[0].date.localeCompare(b.runs[0].date) || a.departTime.localeCompare(b.departTime))
+      .slice(0, 6);
   } catch {
     return [];
   }
@@ -54,10 +57,10 @@ export default async function Home() {
               <span className="text-accent">Split the fuel.</span>
             </h1>
             <p className="mt-5 max-w-xl text-lg text-teal-50/90">
-              Find a seat in a car already going your way, or fill the empty seats in yours. Daily office and university commutes, or a one-off trip. No sign-up.
+              Find a seat in a car already going your way, or fill the empty seats in yours. Daily commutes across the twin cities, or a trip to Lahore, Peshawar or anywhere in Pakistan.
             </p>
             <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-teal-50/90">
-              {["Pickup anywhere on the route", "Women-only rides", "Rated drivers", "Live driver location"].map((t) => (
+              {["ID-verified drivers & riders", "City & intercity rides", "Women-only rides", "Live driver location"].map((t) => (
                 <li key={t} className="flex items-center gap-1.5">
                   <Check className="size-4 text-accent" /> {t}
                 </li>
@@ -143,7 +146,7 @@ export default async function Home() {
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             [ShieldCheck, "Women-only rides", "Drivers can take only women (or only men). Riders' phone numbers are shown only to their driver."],
-            [Star, "Rated drivers", "Riders rate every driver after the ride. See a driver's stars and reviews before you book."],
+            [Star, "Verified, rated drivers", "Every driver's CNIC, licence and car are checked, and riders rate them after each ride."],
             [MessageCircle, "WhatsApp, not calls", "Once booked, message the driver in one tap with your booking already written."],
             [MapPinned, "Any point on the way", "Not on the list? Drop a pin. Rides within about 3 km of your pickup and drop-off show up."],
           ].map(([Icon, t, d]) => {
@@ -178,6 +181,9 @@ export default async function Home() {
             <span>Carpooling from Wah Cantt to Rawat · {BRAND.domain}</span>
             <Link href="/feedback?from=/" className="font-semibold text-brand hover:underline">
               Feedback
+            </Link>
+            <Link href="/privacy" className="font-semibold text-brand hover:underline">
+              Privacy
             </Link>
           </span>
         </div>

@@ -2,6 +2,8 @@
  * Common pickup / drop-off points from Wah Cantt to Rawat (GT Road corridor, Islamabad, Rawalpindi).
  * Coordinates are approximate (good to a few hundred metres); anyone can drop a custom pin on the map instead.
  */
+import { findCity } from "./cities";
+
 export type Place = { key: string; name: string; area: string; lat: number; lng: number };
 
 export const AREAS = [
@@ -110,7 +112,8 @@ export const PLACES: Place[] = [
   P("Expressway, Bahria & Rawat", "rawat", "Rawat (GT Road)", 33.4955, 73.193),
 ];
 
-export const findPlace = (key: string | null | undefined) => (key ? PLACES.find((p) => p.key === key) : undefined);
+export const findPlace = (key: string | null | undefined): { key: string; name: string; lat: number; lng: number } | undefined =>
+  key ? (PLACES.find((p) => p.key === key) ?? findCity(key)) : undefined;
 
 /** A place someone picked: from the list (has key) or a custom pin. */
 export type Point = { name: string; lat: number; lng: number; key?: string };

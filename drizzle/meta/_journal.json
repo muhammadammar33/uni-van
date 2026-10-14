@@ -50,6 +50,13 @@
       "when": 1791964489101,
       "tag": "0006_phone_verifications",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791971982675,
+      "tag": "0007_identities_intercity",
+      "breakpoints": true
     }
   ]
 }

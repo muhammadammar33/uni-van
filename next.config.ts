@@ -8,8 +8,8 @@ const securityHeaders = [
   { key: "Content-Security-Policy", value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  // Location is used by the site itself; camera, microphone and payments never.
-  { key: "Permissions-Policy", value: "geolocation=(self), camera=(), microphone=(), payment=(), usb=()" },
+  // Location and camera (ID photos) are used by the site itself; microphone and payments never.
+  { key: "Permissions-Policy", value: "geolocation=(self), camera=(self), microphone=(), payment=(), usb=()" },
 ];
 
 const nextConfig: NextConfig = {

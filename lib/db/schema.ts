@@ -152,7 +152,10 @@ export type Booking = typeof bookings.$inferSelect;
 /* ---------- Carpool ---------- */
 
 export const rideScheduleEnum = pgEnum("ride_schedule", ["once", "daily", "weekly"]);
-export const rideStatusEnum = pgEnum("ride_status", ["active", "paused", "cancelled"]);
+/** "pending": saved, but waits until the driver's ID is approved (then it goes live by itself). */
+export const rideStatusEnum = pgEnum("ride_status", ["active", "paused", "cancelled", "pending"]);
+/** "city": within the Islamabad area. "intercity": between cities anywhere in Pakistan. */
+export const rideKindEnum = pgEnum("ride_kind", ["city", "intercity"]);
 /** Who may ride: anyone, or only women / only men (e.g. a female driver taking female passengers). */
 export const rideRidersEnum = pgEnum("ride_riders", ["anyone", "female", "male"]);
 
@@ -163,6 +166,7 @@ export const rides = pgTable(
     id: serial("id").primaryKey(),
     /** Public link: /r/<slug> */
     slug: text("slug").notNull().unique(),
+    kind: rideKindEnum("kind").default("city").notNull(),
     /** Secret for the driver's page. */
     manageToken: text("manage_token").notNull().unique(),
     driverName: text("driver_name").notNull(),
@@ -312,6 +316,91 @@ export const phoneVerifications = pgTable(
   (t) => [index("phone_verifications_phone_idx").on(t.phone)],
 );
 
+/* ---------- Identity checks ---------- */
+
+export const idStatusEnum = pgEnum("id_status", ["none", "pending", "approved", "rejected"]);
+
+/**
+ * A person on Hamsafar, keyed by their (WhatsApp) phone number. Riders verify with CNIC + selfie (under 18:
+ * B-form + a parent's CNIC); drivers also add their driving licence and car registration. Reviewed by a
+ * super admin. Photos live (encrypted) in identity_docs.
+ */
+export const identities = pgTable(
+  "identities",
+  {
+    id: serial("id").primaryKey(),
+    phone: text("phone").notNull().unique(),
+    idType: text("id_type").$type<"cnic" | "bform">().notNull(),
+    /** 13 digits, no dashes. CNIC, or the B-form number for under-18s. */
+    idNumber: text("id_number").notNull().unique(),
+    fullName: text("full_name").notNull(),
+    fatherName: text("father_name"),
+    gender: genderEnum("gender").notNull(),
+    /** "YYYY-MM-DD" */
+    dob: text("dob").notNull(),
+    idExpiry: text("id_expiry"),
+    guardianName: text("guardian_name"),
+    guardianCnic: text("guardian_cnic"),
+    guardianRelation: text("guardian_relation"),
+    licenseNumber: text("license_number"),
+    licenseExpiry: text("license_expiry"),
+    /** Who issued the licence: islamabad, punjab, sindh, kp, balochistan, ajk, gb. */
+    licenseAuthority: text("license_authority"),
+    /** The car's registration number, e.g. "LEA-2207". */
+    vehicleReg: text("vehicle_reg"),
+    riderStatus: idStatusEnum("rider_status").default("none").notNull(),
+    driverStatus: idStatusEnum("driver_status").default("none").notNull(),
+    rejectReason: text("reject_reason"),
+    /** Automatic checks that need a human look (gender digit, age, duplicate...). */
+    warnings: jsonb("warnings").$type<string[]>().default([]).notNull(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedBy: integer("reviewed_by").references(() => admins.id, { onDelete: "set null" }),
+    createdAt,
+  },
+  (t) => [index("identities_rider_status_idx").on(t.riderStatus), index("identities_driver_status_idx").on(t.driverStatus)],
+);
+
+/** ID photos, encrypted (AES-256-GCM). Only super admins can open them, and every view is logged. */
+export const identityDocs = pgTable(
+  "identity_docs",
+  {
+    id: serial("id").primaryKey(),
+    identityId: integer("identity_id").notNull().references(() => identities.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<"cnic_front" | "cnic_back" | "selfie" | "license" | "bform" | "guardian_front" | "guardian_back">().notNull(),
+    mime: text("mime").notNull(),
+    /** base64 of iv(12) + ciphertext + tag(16). */
+    data: text("data").notNull(),
+    createdAt,
+  },
+  (t) => [index("identity_docs_identity_idx").on(t.identityId)],
+);
+
+/** Who opened which ID photo, when. */
+export const idAccessLog = pgTable("id_access_log", {
+  id: serial("id").primaryKey(),
+  adminId: integer("admin_id").references(() => admins.id, { onDelete: "set null" }),
+  identityId: integer("identity_id").references(() => identities.id, { onDelete: "cascade" }),
+  docKind: text("doc_kind").notNull(),
+  at: timestamp("at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** Browsers (e.g. the owner's phone) that get a notification when someone submits their ID. */
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  adminId: integer("admin_id").notNull().references(() => admins.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt,
+});
+
+/** Small key/value settings the app creates itself (e.g. its push notification keys). */
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
+
 /** Attempt counters for rate limits (sign-in, booking codes, ride creation). Keys never hold raw IP addresses. */
 export const rateLimits = pgTable("rate_limits", {
   key: text("key").primaryKey(),
@@ -324,3 +413,4 @@ export type RidePoint = typeof ridePoints.$inferSelect;
 export type RideBooking = typeof rideBookings.$inferSelect;
 export type DriverReview = typeof driverReviews.$inferSelect;
 export type Feedback = typeof feedback.$inferSelect;
+export type Identity = typeof identities.$inferSelect;

@@ -7,6 +7,7 @@ import { AdminNav, type NavItem } from "@/components/admin/AdminNav";
 import { Logo } from "@/components/Logo";
 import { ORG_COOKIE, requireAdmin } from "@/lib/auth";
 import { db, schema as s } from "@/lib/db";
+import { pendingCount } from "@/lib/identity";
 import { orgInfo } from "@/lib/orgTypes";
 import { leaveOrg, logout } from "../actions";
 
@@ -23,7 +24,13 @@ export default async function PanelLayout({ children }: { children: React.ReactN
     if (orgInfo(org.type).roster) items.push({ href: "/admin/riders", label: orgInfo(org.type).riders.replace(/^./, (c) => c.toUpperCase()), icon: "riders" });
     items.push({ href: "/admin/account", label: "Team", icon: "team" });
   }
-  if (admin.role === "super") items.push({ href: "/admin/orgs", label: "Organisations", icon: "orgs" }, { href: "/admin/rides", label: "Carpool", icon: "carpool" }, { href: "/admin/feedback", label: "Feedback", icon: "feedback" });
+  if (admin.role === "super")
+    items.push(
+      { href: "/admin/verifications", label: "Verifications", icon: "ids", badge: await pendingCount().catch(() => 0) },
+      { href: "/admin/orgs", label: "Organisations", icon: "orgs" },
+      { href: "/admin/rides", label: "Carpool", icon: "carpool" },
+      { href: "/admin/feedback", label: "Feedback", icon: "feedback" },
+    );
 
   return (
     <div className="min-h-dvh">

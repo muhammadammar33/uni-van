@@ -103,6 +103,8 @@ export class BookingError extends Error {
   constructor(
     message: string,
     readonly status = 400,
+    /** Extra fields for the browser, e.g. { code: "id_required" } so it can open the right screen. */
+    readonly extra?: Record<string, unknown>,
   ) {
     super(message);
   }

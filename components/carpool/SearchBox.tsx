@@ -3,13 +3,26 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUpDown, Search } from "lucide-react";
+import { KindTabs } from "@/components/carpool/KindTabs";
 import { PlacePicker } from "@/components/carpool/PlacePicker";
+import type { RideKind } from "@/lib/cities";
 import { formatDate, todayLocal } from "@/lib/format";
 import { encodePoint, type Point } from "@/lib/places";
 import { addDays } from "@/lib/schedule";
 
 /** Pickup, drop-off and day; goes to /search. */
-export function SearchBox({ from: initialFrom = null, to: initialTo = null, date: initialDate = "" }: { from?: Point | null; to?: Point | null; date?: string }) {
+export function SearchBox({
+  from: initialFrom = null,
+  to: initialTo = null,
+  date: initialDate = "",
+  kind: initialKind = "city",
+}: {
+  from?: Point | null;
+  to?: Point | null;
+  date?: string;
+  kind?: RideKind;
+}) {
+  const [kind, setKind] = useState<RideKind>(initialKind);
   const router = useRouter();
   const [from, setFrom] = useState<Point | null>(initialFrom);
   const [to, setTo] = useState<Point | null>(initialTo);
@@ -27,14 +40,25 @@ export function SearchBox({ from: initialFrom = null, to: initialTo = null, date
     if (from) q.set("from", encodePoint(from));
     if (to) q.set("to", encodePoint(to));
     if (date) q.set("date", date);
+    if (kind === "intercity") q.set("kind", kind);
     router.push(`/search?${q}`);
   };
 
   return (
     <form onSubmit={go} className="space-y-3 rounded-3xl bg-white p-4 text-ink shadow-lift sm:p-5">
+      <KindTabs
+        value={kind}
+        onChange={(k) => {
+          if (k === kind) return;
+          setKind(k);
+          // A city spot works for both; a town far away doesn't belong in a city search.
+          setFrom(null);
+          setTo(null);
+        }}
+      />
       <div className="relative space-y-3">
-        <PlacePicker label="Pickup" icon="start" value={from} onChange={setFrom} placeholder="Where are you?" />
-        <PlacePicker label="Drop-off" icon="end" value={to} onChange={setTo} placeholder="Where are you going?" />
+        <PlacePicker label="Pickup" icon="start" scope={kind} value={from} onChange={setFrom} placeholder={kind === "city" ? "Where are you?" : "Leaving from which city?"} />
+        <PlacePicker label="Drop-off" icon="end" scope={kind} value={to} onChange={setTo} placeholder={kind === "city" ? "Where are you going?" : "Going to which city?"} />
         <button
           type="button"
           onClick={() => {

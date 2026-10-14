@@ -1,5 +1,6 @@
 "use client";
 
+import { Portal } from "@/components/Portal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BadgeCheck, LoaderCircle, MessageCircle, ShieldCheck, X } from "lucide-react";
 import { displayPhone, normalizePhone } from "@/lib/format";
@@ -162,107 +163,107 @@ function VerifyDialog({ phone, mode, onDone }: { phone: string; mode: NonNullabl
 
   const shown = displayPhone(phone);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => onDone(null)}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="verify-title"
-        className="w-full max-w-md animate-rise rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start gap-3">
-          <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#25D366]/15 text-[#128C7E]">
-            <ShieldCheck className="size-6" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 id="verify-title" className="text-lg font-extrabold">
-              Verify your WhatsApp number
-            </h2>
-            <p className="text-sm text-slate-500">
-              {shown}. Once per phone: it keeps every number on Hamsafar real.
-            </p>
+    <Portal>
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => onDone(null)}>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="verify-title"
+          className="w-full max-w-md animate-rise rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-start gap-3">
+            <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#25D366]/15 text-[#128C7E]">
+              <ShieldCheck className="size-6" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 id="verify-title" className="text-lg font-extrabold">
+                Verify your WhatsApp number
+              </h2>
+              <p className="text-sm text-slate-500">{shown}. Once per phone: it keeps every number on Hamsafar real.</p>
+            </div>
+            <button type="button" onClick={() => onDone(null)} className="grid size-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-100" aria-label="Close">
+              <X className="size-5" />
+            </button>
           </div>
-          <button type="button" onClick={() => onDone(null)} className="grid size-9 place-items-center rounded-xl text-slate-500 hover:bg-slate-100" aria-label="Close">
-            <X className="size-5" />
-          </button>
-        </div>
 
-        <div className="mt-5 space-y-3">
-          {!started && (
-            <>
-              {mode.send && (
-                <button type="button" className="btn w-full bg-[#25D366] py-3 text-white hover:bg-[#1ebe5b]" disabled={busy} onClick={() => start("send")}>
-                  {busy ? <LoaderCircle className="size-5 animate-spin" /> : <MessageCircle className="size-5" />} Send me a code on WhatsApp
-                </button>
-              )}
-              {mode.message && (
-                <button type="button" className={mode.send ? "btn-ghost w-full" : "btn w-full bg-[#25D366] py-3 text-white hover:bg-[#1ebe5b]"} disabled={busy} onClick={() => start("message")}>
-                  {!mode.send && <MessageCircle className="size-5" />} {mode.send ? "Or verify by sending us a WhatsApp" : "Verify by sending us a WhatsApp"}
-                </button>
-              )}
-            </>
-          )}
-
-          {started?.method === "send" && (
-            <>
-              <p className="text-sm">
-                We sent a 6-digit code to <b>{shown}</b> on WhatsApp.
-              </p>
-              <input
-                ref={codeInput}
-                className="input text-center font-mono text-2xl tracking-[0.5em]"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                aria-label="6-digit code"
-                maxLength={6}
-                value={code}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/\D/g, "").slice(0, 6);
-                  setCode(v);
-                  if (v.length === 6) check(v);
-                }}
-              />
-              <button type="button" className="btn-primary w-full py-3" disabled={busy || code.length !== 6} onClick={() => check(code)}>
-                {busy ? "Checking…" : "Verify"}
-              </button>
-              <div className="flex flex-wrap justify-between gap-2 text-sm">
-                <button type="button" className="font-semibold text-brand disabled:text-slate-400" disabled={resendIn > 0 || busy} onClick={() => start("send")}>
-                  {resendIn > 0 ? `Send again in ${resendIn}s` : "Send the code again"}
-                </button>
-                {mode.message && (
-                  <button type="button" className="font-semibold text-slate-500 hover:text-ink" onClick={() => start("message")}>
-                    Didn&apos;t get it? Message us instead
+          <div className="mt-5 space-y-3">
+            {!started && (
+              <>
+                {mode.send && (
+                  <button type="button" className="btn w-full bg-[#25D366] py-3 text-white hover:bg-[#1ebe5b]" disabled={busy} onClick={() => start("send")}>
+                    {busy ? <LoaderCircle className="size-5 animate-spin" /> : <MessageCircle className="size-5" />} Send me a code on WhatsApp
                   </button>
                 )}
-              </div>
-            </>
-          )}
+                {mode.message && (
+                  <button type="button" className={mode.send ? "btn-ghost w-full" : "btn w-full bg-[#25D366] py-3 text-white hover:bg-[#1ebe5b]"} disabled={busy} onClick={() => start("message")}>
+                    {!mode.send && <MessageCircle className="size-5" />} {mode.send ? "Or verify by sending us a WhatsApp" : "Verify by sending us a WhatsApp"}
+                  </button>
+                )}
+              </>
+            )}
 
-          {started?.method === "message" && (
-            <>
-              <ol className="space-y-1 text-sm text-slate-700">
-                <li>1. Tap the button: WhatsApp opens with a message ready.</li>
-                <li>
-                  2. Press <b>Send</b> (from {shown}).
-                </li>
-                <li>3. Come back here: it continues by itself.</li>
-              </ol>
-              <a href={started.link} target="_blank" rel="noreferrer" className="btn w-full bg-[#25D366] py-3 text-white hover:bg-[#1ebe5b]">
-                <MessageCircle className="size-5" /> Open WhatsApp
-              </a>
-              <p className="flex items-center justify-center gap-2 text-sm text-slate-500">
-                <LoaderCircle className="size-4 animate-spin" /> Waiting for your message…
+            {started?.method === "send" && (
+              <>
+                <p className="text-sm">
+                  We sent a 6-digit code to <b>{shown}</b> on WhatsApp.
+                </p>
+                <input
+                  ref={codeInput}
+                  className="input text-center font-mono text-2xl tracking-[0.5em]"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  aria-label="6-digit code"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, "").slice(0, 6);
+                    setCode(v);
+                    if (v.length === 6) check(v);
+                  }}
+                />
+                <button type="button" className="btn-primary w-full py-3" disabled={busy || code.length !== 6} onClick={() => check(code)}>
+                  {busy ? "Checking…" : "Verify"}
+                </button>
+                <div className="flex flex-wrap justify-between gap-2 text-sm">
+                  <button type="button" className="font-semibold text-brand disabled:text-slate-400" disabled={resendIn > 0 || busy} onClick={() => start("send")}>
+                    {resendIn > 0 ? `Send again in ${resendIn}s` : "Send the code again"}
+                  </button>
+                  {mode.message && (
+                    <button type="button" className="font-semibold text-slate-500 hover:text-ink" onClick={() => start("message")}>
+                      Didn&apos;t get it? Message us instead
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+
+            {started?.method === "message" && (
+              <>
+                <ol className="space-y-1 text-sm text-slate-700">
+                  <li>1. Tap the button: WhatsApp opens with a message ready.</li>
+                  <li>
+                    2. Press <b>Send</b> (from {shown}).
+                  </li>
+                  <li>3. Come back here: it continues by itself.</li>
+                </ol>
+                <a href={started.link} target="_blank" rel="noreferrer" className="btn w-full bg-[#25D366] py-3 text-white hover:bg-[#1ebe5b]">
+                  <MessageCircle className="size-5" /> Open WhatsApp
+                </a>
+                <p className="flex items-center justify-center gap-2 text-sm text-slate-500">
+                  <LoaderCircle className="size-4 animate-spin" /> Waiting for your message…
+                </p>
+              </>
+            )}
+
+            {error && (
+              <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-800">
+                {error}
               </p>
-            </>
-          )}
-
-          {error && (
-            <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-800">
-              {error}
-            </p>
-          )}
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </Portal>
   );
 }

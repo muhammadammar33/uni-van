@@ -4,9 +4,11 @@ import { and, asc, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireDb, schema as s } from "@/lib/db";
 import { normalizePhone, nowLocal, todayLocal } from "@/lib/format";
-import { blur, distanceKm, matchRoute, type LatLng } from "@/lib/geo";
+import { blur, distanceKm, matchRoute, matchStops, type LatLng } from "@/lib/geo";
+import { inCityArea, MATCH_RADIUS_KM, RIDE_KINDS, type RideKind } from "@/lib/cities";
 import { GENDERS } from "@/lib/layout";
 import { BookingError } from "@/lib/trips";
+import { driverGate, identityByPhone, riderGate, verifiedDrivers } from "@/lib/identity";
 import { requireVerifiedPhone } from "@/lib/verify";
 import { nextRuns, runOver, runsOn, type Schedule } from "@/lib/schedule";
 
@@ -24,6 +26,7 @@ const pointSchema = z.object({
 
 export const rideInput = z
   .object({
+    kind: z.enum(RIDE_KINDS).default("city"),
     driverName: z.string().trim().min(2, "Enter your name").max(60),
     driverPhone: z.string().trim().max(30),
     driverGender: z.enum(GENDERS, "Choose male or female"),
@@ -53,8 +56,15 @@ function readRide(raw: unknown) {
   if (!phone) throw new BookingError("Enter a valid phone number, e.g. 0300 1234567");
   for (let i = 1; i < r.points.length; i++)
     if (distanceKm(r.points[i - 1], r.points[i]) < 0.05) throw new BookingError(`"${r.points[i].name}" is the same place as the one before it`);
+  if (r.kind === "city") {
+    const out = r.points.find((p) => !inCityArea(p));
+    if (out) throw new BookingError(`"${out.name}" is outside the city area. City rides are within Islamabad, Rawalpindi, Wah, Taxila and Rawat. For other cities, choose "Between cities".`);
+  } else if (r.points.every(inCityArea)) {
+    throw new BookingError(`This whole route is inside Islamabad, Rawalpindi, Wah, Taxila and Rawat. Choose "In the city" instead.`);
+  }
   return {
     ride: {
+      kind: r.kind,
       driverName: r.driverName,
       driverPhone: phone,
       driverGender: r.driverGender,
@@ -76,19 +86,25 @@ function readRide(raw: unknown) {
 
 /** The phone-check token the browser sends along (see lib/verify.ts). */
 const tokenOf = (raw: unknown) => (raw && typeof raw === "object" ? (raw as { phoneToken?: unknown }).phoneToken : undefined);
+/** The CNIC number a returning driver types to confirm it's them. */
+const cnicOf = (raw: unknown) => (raw && typeof raw === "object" ? (raw as { driverCnic?: unknown }).driverCnic : undefined);
 
 export async function createRide(raw: unknown) {
   const { ride, points } = readRide(raw);
   await requireVerifiedPhone(tokenOf(raw), ride.driverPhone);
   if (ride.schedule === "once" && ride.date < todayLocal()) throw new BookingError("The date has already passed");
+  // The driver's ID: rides of drivers still being checked are saved, and go live once they're approved.
+  const { status, gender } = await driverGate(ride.driverPhone, cnicOf(raw));
+  // Women-only rides rely on this, so it comes from the ID, not the form.
+  ride.driverGender = gender;
   const db = requireDb();
   return db.transaction(async (tx) => {
     const [row] = await tx
       .insert(s.rides)
-      .values({ ...ride, slug: randomBytes(5).toString("base64url"), manageToken: randomBytes(16).toString("base64url") })
+      .values({ ...ride, status, slug: randomBytes(5).toString("base64url"), manageToken: randomBytes(16).toString("base64url") })
       .returning();
     await tx.insert(s.ridePoints).values(points.map((p, idx) => ({ rideId: row.id, idx, name: p.name, lat: p.lat, lng: p.lng, placeKey: p.key ?? null })));
-    return { slug: row.slug, manageToken: row.manageToken };
+    return { slug: row.slug, manageToken: row.manageToken, status };
   });
 }
 
@@ -100,7 +116,13 @@ export async function updateRide(token: string, raw: unknown) {
     const [row] = await tx.select().from(s.rides).where(eq(s.rides.manageToken, token)).for("update");
     if (!row) throw new BookingError("Ride not found", 404);
     // A new number for the driver has to be checked like the first one.
-    if (ride.driverPhone !== row.driverPhone) await requireVerifiedPhone(tokenOf(raw), ride.driverPhone);
+    if (ride.driverPhone !== row.driverPhone) {
+      await requireVerifiedPhone(tokenOf(raw), ride.driverPhone);
+      const gate = await driverGate(ride.driverPhone, cnicOf(raw));
+      if (gate.status === "pending" && row.status === "active") Object.assign(ride, { status: "pending" as const });
+    }
+    const ident = await identityByPhone(ride.driverPhone);
+    if (ident) ride.driverGender = ident.gender;
     const upcoming = await tx
       .select()
       .from(s.rideBookings)
@@ -129,8 +151,15 @@ export async function deleteRide(token: string) {
 }
 
 export async function setRideStatus(token: string, status: s.Ride["status"]) {
-  const updated = await requireDb().update(s.rides).set({ status }).where(eq(s.rides.manageToken, token)).returning({ id: s.rides.id });
-  if (!updated.length) throw new BookingError("Ride not found", 404);
+  const [r] = await requireDb().select().from(s.rides).where(eq(s.rides.manageToken, token));
+  if (!r) throw new BookingError("Ride not found", 404);
+  if (status === "pending") throw new BookingError("Not allowed");
+  // Only a driver whose ID is approved can put a ride live (a waiting ride goes live by itself on approval).
+  if (status === "active" && r.status !== "active") {
+    const i = await identityByPhone(r.driverPhone);
+    if (i?.driverStatus !== "approved") throw new BookingError("Your ride goes live once your ID is approved.", 403);
+  }
+  await requireDb().update(s.rides).set({ status }).where(eq(s.rides.id, r.id));
 }
 
 const scheduleOf = (r: s.Ride): Schedule => ({ kind: r.schedule, date: r.date, days: r.days, until: r.until });
@@ -172,12 +201,15 @@ export type PublicRide = {
   rating: DriverRating | null;
   /** Latest reviews, on the ride page only. */
   reviews?: PublicReview[];
+  /** The driver's CNIC and licence were checked by Hamsafar. */
+  verified: boolean;
+  kind: RideKind;
 };
 
 export type DriverRating = { avg: number; count: number };
 export type PublicReview = { name: string; stars: number; comment: string | null; date: string };
 
-function toPublic(r: s.Ride, points: s.RidePoint[], taken: Map<string, number>, runs: string[], ratings: Map<string, DriverRating>): PublicRide {
+function toPublic(r: s.Ride, points: s.RidePoint[], taken: Map<string, number>, runs: string[], ratings: Map<string, DriverRating>, verified: Set<string>): PublicRide {
   return {
     slug: r.slug,
     driverName: r.driverName.split(" ")[0],
@@ -193,6 +225,8 @@ function toPublic(r: s.Ride, points: s.RidePoint[], taken: Map<string, number>, 
     points: points.map((p) => ({ name: p.name, lat: p.lat, lng: p.lng })),
     runs: runs.map((date) => ({ date, left: Math.max(0, r.seats - (taken.get(`${r.id}:${date}`) ?? 0)) })),
     rating: ratings.get(r.driverPhone) ?? null,
+    verified: verified.has(r.driverPhone),
+    kind: r.kind,
   };
 }
 
@@ -226,33 +260,44 @@ export async function publicRide(slug: string) {
   const [r] = await requireDb().select().from(s.rides).where(eq(s.rides.slug, slug)).limit(1);
   if (!r) return null;
   const runs = r.status === "active" ? upcomingRuns(r, 14) : [];
-  const [points, taken, ratings, reviews] = await Promise.all([pointsFor([r.id]), seatsTaken([r.id], runs), ratingsFor([r.driverPhone]), reviewsFor(r.driverPhone)]);
-  return { ...toPublic(r, points, taken, runs, ratings), reviews };
+  const [points, taken, ratings, reviews, verified] = await Promise.all([
+    pointsFor([r.id]),
+    seatsTaken([r.id], runs),
+    ratingsFor([r.driverPhone]),
+    reviewsFor(r.driverPhone),
+    verifiedDrivers([r.driverPhone]),
+  ]);
+  return { ...toPublic(r, points, taken, runs, ratings, verified), reviews };
 }
 
 export type SearchResult = PublicRide & { pickupKm: number; dropKm: number; pickupIdx: number; dropIdx: number };
 
-/** Active rides passing near `from` and then `to`, running on `date` (or any of the next 7 days when null). */
-export async function searchRides(from: LatLng | null, to: LatLng | null, date: string | null) {
+/**
+ * Active rides of `kind` passing near `from` and then `to`, running on `date` (or any of the next 7 days when null).
+ * City rides match anywhere along the route; rides between cities only near their stops.
+ */
+export async function searchRides(from: LatLng | null, to: LatLng | null, date: string | null, kind: RideKind = "city") {
   const db = requireDb();
   const today = todayLocal();
   const rows = await db
     .select()
     .from(s.rides)
-    .where(and(eq(s.rides.status, "active"), sql`((${s.rides.schedule} <> 'once' and (${s.rides.until} is null or ${s.rides.until} >= ${today})) or ${s.rides.date} >= ${today})`))
+    .where(and(eq(s.rides.status, "active"), eq(s.rides.kind, kind), sql`((${s.rides.schedule} <> 'once' and (${s.rides.until} is null or ${s.rides.until} >= ${today})) or ${s.rides.date} >= ${today})`))
     .limit(500);
   const active = rows.filter((r) => r.status === "active");
   const points = await pointsFor(active.map((r) => r.id));
   const out: { ride: s.Ride; pts: s.RidePoint[]; match: ReturnType<typeof matchRoute>; runs: string[] }[] = [];
+  const matcher = kind === "city" ? matchRoute : matchStops;
+  const radius = MATCH_RADIUS_KM[kind];
   for (const r of active) {
     const pts = points.filter((p) => p.rideId === r.id);
     if (pts.length < 2) continue;
     let match: ReturnType<typeof matchRoute> = null;
     if (from && to) {
-      match = matchRoute(pts, from, to);
+      match = matcher(pts, from, to, radius);
       if (!match) continue;
     } else if (from || to) {
-      const m = from ? matchRoute(pts, from, pts[pts.length - 1], 3) : matchRoute(pts, pts[0], to!, 3);
+      const m = from ? matcher(pts, from, pts[pts.length - 1], radius) : matcher(pts, pts[0], to!, radius);
       if (!m) continue;
       match = m;
     }
@@ -267,6 +312,7 @@ export async function searchRides(from: LatLng | null, to: LatLng | null, date: 
     ),
     ratingsFor(out.map((o) => o.ride.driverPhone)),
   ]);
+  const verified = await verifiedDrivers(out.map((o) => o.ride.driverPhone));
   const nearest = (pts: s.RidePoint[], p: LatLng | null, fallback: number) => {
     if (!p) return fallback;
     let best = fallback;
@@ -281,7 +327,7 @@ export async function searchRides(from: LatLng | null, to: LatLng | null, date: 
       let dropIdx = nearest(pts, to, pts.length - 1);
       if (dropIdx <= pickupIdx) dropIdx = Math.min(pts.length - 1, pickupIdx + 1);
       if (pickupIdx >= dropIdx) pickupIdx = Math.max(0, dropIdx - 1);
-      return { ...toPublic(ride, pts, taken, runs, ratings), pickupKm: match?.pickupKm ?? 0, dropKm: match?.dropKm ?? 0, pickupIdx, dropIdx };
+      return { ...toPublic(ride, pts, taken, runs, ratings, verified), pickupKm: match?.pickupKm ?? 0, dropKm: match?.dropKm ?? 0, pickupIdx, dropIdx };
     })
     .filter((r) => r.runs.some((x) => x.left > 0))
     .sort((a, b) => a.runs[0].date.localeCompare(b.runs[0].date) || a.departTime.localeCompare(b.departTime) || a.pickupKm + a.dropKm - (b.pickupKm + b.dropKm));
@@ -341,11 +387,18 @@ export async function bookRide(slug: string, raw: unknown): Promise<RideBookingV
   const phone = normalizePhone(input.phone);
   if (!phone) throw new BookingError("Enter a valid phone number, e.g. 0300 1234567");
   await requireVerifiedPhone(tokenOf(raw), phone);
+  // Riders need an ID on file; their gender comes from it (that's what women-only rides check).
+  const { gender } = await riderGate(phone);
+  input.gender = gender;
   return requireDb().transaction(async (tx) => {
     const locked = await tx.execute<{ id: number }>(sql`select id from rides where slug = ${slug} for update`);
     if (!locked[0]) throw new BookingError("Ride not found", 404);
     const [r] = await tx.select().from(s.rides).where(eq(s.rides.id, locked[0].id));
-    if (r.status !== "active") throw new BookingError(r.status === "paused" ? "The driver has paused this ride." : "This ride was cancelled.", 409);
+    if (r.status !== "active")
+      throw new BookingError(
+        r.status === "paused" ? "The driver has paused this ride." : r.status === "pending" ? "This ride isn't live yet: the driver's ID is still being checked." : "This ride was cancelled.",
+        409,
+      );
     if (!upcomingRuns(r, 60).includes(input.date)) throw new BookingError("The ride doesn't run on that day, or it has already left.", 409);
     if (r.riders !== "anyone" && r.riders !== input.gender) throw new BookingError(`This ride is for ${r.riders === "female" ? "women" : "men"} only.`, 409);
     if (phone === r.driverPhone) throw new BookingError("That's the driver's own number.");
@@ -460,9 +513,10 @@ export async function manageRide(token: string) {
       .orderBy(asc(s.rideBookings.date), asc(s.rideBookings.pickupIdx)),
   ]);
   const runs = r.status === "active" ? upcomingRuns(r, 14) : [];
-  const [ratings, reviews] = await Promise.all([ratingsFor([r.driverPhone]), reviewsFor(r.driverPhone, 20)]);
+  const [ratings, reviews, ident] = await Promise.all([ratingsFor([r.driverPhone]), reviewsFor(r.driverPhone, 20), identityByPhone(r.driverPhone)]);
   return {
     ride: r,
+    idCheck: ident ? { status: ident.driverStatus, submittedAt: ident.submittedAt.toISOString(), rejectReason: ident.rejectReason } : null,
     rating: ratings.get(r.driverPhone) ?? null,
     reviews,
     points: pts.map((p) => ({ name: p.name, lat: p.lat, lng: p.lng, key: p.placeKey ?? undefined })),

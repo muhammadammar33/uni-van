@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Armchair, Building2, Bus, Car, MessageSquareHeart, UserCog, Users } from "lucide-react";
+import { Armchair, Building2, Bus, Car, IdCard, MessageSquareHeart, UserCog, Users } from "lucide-react";
 
-const ICONS = { trips: Bus, vehicles: Armchair, riders: Users, team: UserCog, orgs: Building2, carpool: Car, feedback: MessageSquareHeart };
-export type NavItem = { href: string; label: string; icon: keyof typeof ICONS };
+const ICONS = { trips: Bus, vehicles: Armchair, riders: Users, team: UserCog, orgs: Building2, carpool: Car, feedback: MessageSquareHeart, ids: IdCard };
+/** `badge`: a count to show (e.g. IDs waiting for review). */
+export type NavItem = { href: string; label: string; icon: keyof typeof ICONS; badge?: number };
 
 const isOn = (href: string, path: string) =>
   href === "/admin" ? path === "/admin" || path.startsWith("/admin/trips") : path === href || path.startsWith(href + "/");
@@ -27,6 +28,11 @@ export function AdminNav({ items }: { items: NavItem[] }) {
           >
             <Icon className="size-4" />
             <span className="hidden md:inline">{n.label}</span>
+            {!!n.badge && (
+              <span className="grid min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[11px] font-bold leading-5 text-white" aria-label={`${n.badge} waiting`}>
+                {n.badge}
+              </span>
+            )}
           </Link>
         );
       })}

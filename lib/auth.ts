@@ -58,3 +58,11 @@ export const requireOrg = cache(async () => {
   if (!org) redirect(admin.role === "super" ? "/admin/orgs" : "/admin/login");
   return { admin, org };
 });
+
+/** For API routes: the signed-in super admin, or null (no redirect). */
+export async function superAdminOrNull() {
+  const session = await verifySession((await cookies()).get(SESSION_COOKIE)?.value);
+  if (!session || !db) return null;
+  const [row] = await db.select({ id: s.admins.id, role: s.admins.role, email: s.admins.email }).from(s.admins).where(eq(s.admins.id, Number(session.sub))).limit(1);
+  return row?.role === "super" ? row : null;
+}

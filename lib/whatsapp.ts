@@ -46,6 +46,15 @@ export function sendCode(to: string, code: string) {
   });
 }
 
+/** Any approved template with body parameters {{1}}, {{2}}… (e.g. an alert to the owner). */
+export function sendTemplate(to: string, name: string, params: string[]) {
+  return post({
+    to,
+    type: "template",
+    template: { name, language: { code: env("WHATSAPP_OTP_LANG") || "en" }, components: [{ type: "body", parameters: params.map((text) => ({ type: "text", text })) }] },
+  });
+}
+
 /** A plain reply; only allowed within 24 hours of the person's last message to us (and free then). */
 export function sendText(to: string, text: string) {
   return post({ to, type: "text", text: { body: text, preview_url: false } });

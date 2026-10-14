@@ -25,4 +25,4 @@ export async function proxy(req: NextRequest) {
 }
 
 // Everything except API calls and static files (the admin check above only applies to /admin).
-export const config = { matcher: ["/((?!api/|_next/|icon|apple-icon|favicon|manifest.webmanifest|opengraph-image|robots.txt|sitemap.xml).*)"] };
+export const config = { matcher: ["/((?!api/|_next/|icon|apple-icon|favicon|manifest.webmanifest|sw.js|opengraph-image|robots.txt|sitemap.xml).*)"] };
