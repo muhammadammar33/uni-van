@@ -189,7 +189,7 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
         </div>
       </section>
 
-      <TripPanel token={token} data={data} />
+      <TripPanel token={token} data={data} sharing={sharing} onShare={startSharing} onStopShare={stopSharing} />
 
       {ride.status === "active" && (
         <section className="card space-y-3">

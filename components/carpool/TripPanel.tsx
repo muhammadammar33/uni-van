@@ -2,14 +2,28 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CircleCheckBig, Flag, KeyRound, Lock, Play, UserX } from "lucide-react";
+import { CircleCheckBig, Flag, KeyRound, Lock, Navigation, Play, UserX } from "lucide-react";
 import type { ManageData } from "@/lib/rides";
 
 /**
  * Today's trip for the driver: pickup by pickup, who's on board. The driver can only start the ride from a
  * pickup (or leave a later one) once every rider getting on there has entered the ride code, or isn't there.
+ * Starting the ride also starts sharing the driver's live location with the riders.
  */
-export function TripPanel({ token, data }: { token: string; data: ManageData }) {
+export function TripPanel({
+  token,
+  data,
+  sharing,
+  onShare,
+  onStopShare,
+}: {
+  token: string;
+  data: ManageData;
+  /** The driver's live location is being shared. */
+  sharing: boolean;
+  onShare: () => void;
+  onStopShare: () => void;
+}) {
   const router = useRouter();
   const { trip, points, rideCodes } = data;
   const [busy, setBusy] = useState(false);
@@ -37,9 +51,21 @@ export function TripPanel({ token, data }: { token: string; data: ManageData }) 
       const j = await res.json().catch(() => ({}));
       if (!res.ok) setError(j.error ?? "Couldn't update the trip.");
       router.refresh();
+      return res.ok;
+    } catch {
+      setError("No connection. Try again.");
+      return false;
     } finally {
       setBusy(false);
     }
+  }
+
+  // Leaving a pickup turns on live location (asked right on the tap, so the phone allows it), so riders
+  // further on can watch the car coming. If the trip didn't actually start, it's turned off again.
+  async function leave(stopIdx: number) {
+    const startedHere = !sharing;
+    if (startedHere) onShare();
+    if (!(await act({ action: "leave", stopIdx })) && startedHere && first) onStopShare();
   }
 
   const left = stops.filter((i) => i <= trip.leftIdx);
@@ -55,6 +81,21 @@ export function TripPanel({ token, data }: { token: string; data: ManageData }) 
           <CircleCheckBig className="size-4 text-emerald-600" /> Left {points[i].name}
         </p>
       ))}
+      {!first && (
+        <p className={`flex items-center gap-2 rounded-xl p-2.5 text-sm ${sharing ? "bg-blue-50 text-blue-800" : "bg-amber-50 text-amber-900"}`}>
+          <Navigation className="size-4 shrink-0" />
+          {sharing ? (
+            "Your live location is on: riders can see the car coming."
+          ) : (
+            <>
+              <span className="flex-1">Your live location is off.</span>
+              <button type="button" className="shrink-0 font-semibold underline" onClick={onShare}>
+                Turn it on
+              </button>
+            </>
+          )}
+        </p>
+      )}
       {next === undefined ? (
         <p className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">All riders are picked up. Drive safe!</p>
       ) : (
@@ -100,13 +141,13 @@ export function TripPanel({ token, data }: { token: string; data: ManageData }) 
               </li>
             ))}
           </ul>
-          <button type="button" className="btn-primary w-full py-3" disabled={busy || waiting.length > 0} onClick={() => act({ action: "leave", stopIdx: next })}>
+          <button type="button" className="btn-primary w-full py-3" disabled={busy || waiting.length > 0} onClick={() => leave(next)}>
             {waiting.length ? <Lock className="size-4" /> : <Play className="size-4" />}
             {first ? `Start the ride from ${points[next].name}` : `Leave ${points[next].name}`}
           </button>
           {waiting.length > 0 && (
             <p className="text-xs text-slate-500">
-              Unlocks when everyone here has entered the ride code. This keeps riders safe: they know it&apos;s really you. If someone didn&apos;t come, mark them as not here.
+              Unlocks when everyone here has entered the ride code{first ? ", and then shares your live location with your riders" : ""}. This keeps riders safe: they know it&apos;s really you. If someone didn&apos;t come, mark them as not here.
             </p>
           )}
         </>
