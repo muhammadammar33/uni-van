@@ -17,7 +17,11 @@ const nextConfig: NextConfig = {
   agentRules: false,
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // The ID card reader's files: versioned folder, so they can be cached for good.
+      { source: "/ocr/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
+    ];
   },
 };
 

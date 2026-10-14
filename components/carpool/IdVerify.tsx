@@ -44,14 +44,37 @@ async function compress(file: File, max: number): Promise<string> {
 }
 
 /** Reads the English side of a CNIC on the phone itself (nothing is sent anywhere for this). */
-async function readCard(dataUrl: string) {
+/**
+ * Reads the CNIC's front on this phone. The reader's files come from this site (public/ocr), not a CDN that
+ * might be blocked, and it gives up after 30 seconds: reading is only a help, the person can always type.
+ */
+async function readCard(dataUrl: string, onProgress: (pct: number) => void) {
   const { createWorker } = await import("tesseract.js");
-  const worker = await createWorker("eng");
+  const base = `${window.location.origin}/ocr/5.1.1`;
+  let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("timeout")), 30000)));
   try {
-    const { data } = await worker.recognize(dataUrl);
-    return parseCnicFront(data.text);
+    return await Promise.race([
+      (async () => {
+        worker = await createWorker("eng", 1, {
+          workerPath: `${base}/worker.min.js`,
+          corePath: base,
+          langPath: base,
+          logger: (m: { status: string; progress: number }) => {
+            // Loading the reader is the first half, reading the card the second.
+            const done = m.status === "recognizing text" ? 50 + m.progress * 50 : Math.min(49, m.progress * 45);
+            onProgress(Math.round(done));
+          },
+        });
+        const { data } = await worker.recognize(dataUrl);
+        return parseCnicFront(data.text);
+      })(),
+      timeout,
+    ]);
   } finally {
-    await worker.terminate();
+    clearTimeout(timer);
+    void (worker as Awaited<ReturnType<typeof createWorker>> | null)?.terminate().catch(() => {});
   }
 }
 
@@ -98,6 +121,8 @@ function IdDialog({ role, prefill, status, onDone }: { role: Mode; prefill: IdPr
   const [idType, setIdType] = useState<"cnic" | "bform">("cnic");
   const [photos, setPhotos] = useState<Partial<Record<Kind, string>>>({});
   const [reading, setReading] = useState(false);
+  const [readPct, setReadPct] = useState(0);
+  const [readFailed, setReadFailed] = useState(false);
   const [scanned, setScanned] = useState<{
     idNumber: string | null;
     name: string | null;
@@ -138,8 +163,11 @@ function IdDialog({ role, prefill, status, onDone }: { role: Mode; prefill: IdPr
       setPhotos((p) => ({ ...p, [kind]: url }));
       if (kind === "cnic_front") {
         setReading(true);
+        setReadPct(0);
+        setReadFailed(false);
         try {
-          const r = await readCard(url);
+          const r = await readCard(url, setReadPct);
+          if (!r.idNumber && !r.dob) setReadFailed(true);
           setScanned({ idNumber: r.idNumber, name: r.name });
           // Fill only what's still empty: what the person typed wins.
           setF((cur) => ({
@@ -152,7 +180,8 @@ function IdDialog({ role, prefill, status, onDone }: { role: Mode; prefill: IdPr
             idExpiry: cur.idExpiry || r.expiry || "",
           }));
         } catch {
-          // Reading is a convenience only.
+          // Reading is only a help: the person types the details instead.
+          setReadFailed(true);
         } finally {
           setReading(false);
         }
@@ -294,9 +323,11 @@ function IdDialog({ role, prefill, status, onDone }: { role: Mode; prefill: IdPr
           </div>
           {reading && (
             <p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
-              <LoaderCircle className="size-4 animate-spin" /> Reading your card…
+              <LoaderCircle className="size-4 animate-spin" /> Reading your card… {readPct > 0 && `${readPct}%`}
+              <span className="text-xs">(you can type the details meanwhile)</span>
             </p>
           )}
+          {!reading && readFailed && <p className="mt-2 text-sm text-amber-800">Couldn&apos;t read the card from the photo. Please type the details below.</p>}
         </div>
 
         {!upgrade && (
@@ -406,7 +437,7 @@ function IdDialog({ role, prefill, status, onDone }: { role: Mode; prefill: IdPr
             {error}
           </p>
         )}
-        <button type="button" className="btn-primary w-full py-3.5 text-base" disabled={!ready || busy || reading} onClick={submit}>
+        <button type="button" className="btn-primary w-full py-3.5 text-base" disabled={!ready || busy} onClick={submit}>
           {busy ? "Sending…" : missing.length ? `Add ${missing.length} more photo${missing.length > 1 ? "s" : ""}` : "Send for checking"}
         </button>
         <p className="text-center text-xs text-slate-500">Checked by the Hamsafar team within 24 hours.</p>
