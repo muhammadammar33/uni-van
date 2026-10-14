@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { saveIncoming, saveStatus, type Incoming } from "@/lib/waInbox";
 import { receivedMessage } from "@/lib/verify";
 import { validSignature, waConfig } from "@/lib/whatsapp";
 import { logWebhook, maskPhone } from "@/lib/webhookLog";
@@ -13,9 +14,22 @@ export async function GET(req: Request) {
   return new NextResponse("Forbidden", { status: 403 });
 }
 
-type Incoming = { entry?: { changes?: { value?: { messages?: { from?: string; type?: string; text?: { body?: string }; button?: { text?: string } }[] } }[] }[] };
+type Payload = {
+  entry?: {
+    changes?: {
+      value?: {
+        contacts?: { wa_id?: string; profile?: { name?: string } }[];
+        messages?: Incoming[];
+        statuses?: { id?: string; status?: string; errors?: { title?: string; message?: string }[] }[];
+      };
+    }[];
+  }[];
+};
 
-/** Incoming WhatsApp messages (signed by Meta). Messages carrying a pending code verify the sender's number. */
+/**
+ * Incoming WhatsApp messages (signed by Meta). A message carrying a pending code verifies the sender's
+ * number; every other message goes to the admin's WhatsApp inbox. Delivery ticks update sent replies.
+ */
 export async function POST(req: Request) {
   const raw = await req.text();
   if (!validSignature(raw, req.headers.get("x-hub-signature-256"))) {
@@ -23,20 +37,34 @@ export async function POST(req: Request) {
     if (req.headers.get("x-hub-signature-256")) await logWebhook([{ result: "bad_signature: check WHATSAPP_APP_SECRET" }]);
     return new NextResponse("Bad signature", { status: 401 });
   }
-  let body: Incoming = {};
+  let body: Payload = {};
   try {
     body = JSON.parse(raw);
   } catch {}
   const log: { result: string; from?: string }[] = [];
+  const toInbox: { m: Incoming; name: string | null }[] = [];
+  const statuses: NonNullable<NonNullable<NonNullable<Payload["entry"]>[number]["changes"]>[number]["value"]>["statuses"] = [];
   for (const e of body.entry ?? [])
-    for (const c of e.changes ?? [])
+    for (const c of e.changes ?? []) {
+      const names = new Map((c.value?.contacts ?? []).map((x) => [x.wa_id, x.profile?.name ?? null]));
+      statuses.push(...(c.value?.statuses ?? []));
       for (const m of c.value?.messages ?? []) {
-        const text = m.text?.body ?? m.button?.text ?? "";
         if (!m.from) continue;
-        const result = text ? await receivedMessage(m.from, text).catch((err) => (console.error("webhook", err), "error")) : `not text (${m.type})`;
+        const text = m.text?.body ?? m.button?.text ?? "";
+        const result = text ? await receivedMessage(m.from, text).catch((err) => (console.error("webhook", err), "error")) : `${m.type}`;
         log.push({ result, from: maskPhone(m.from) });
+        // Codes are for the website, not the inbox.
+        const isCode = result === "verified" || result === "wrong_number" || /hamsafar code/i.test(text);
+        if (!isCode) toInbox.push({ m, name: names.get(m.from) ?? null });
       }
+    }
   await logWebhook(log);
+  // Saving photos and voice notes and notifying the admin happens after Meta has its answer.
+  if (toInbox.length || statuses.length)
+    after(async () => {
+      for (const { m, name } of toInbox) await saveIncoming(m, name).catch((err) => console.error("inbox", err));
+      for (const st of statuses) await saveStatus(st).catch((err) => console.error("inbox status", err));
+    });
   // Always 200 so Meta doesn't retry.
   return NextResponse.json({ ok: true });
 }

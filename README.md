@@ -52,6 +52,14 @@ Setup ([Meta for Developers](https://developers.facebook.com/) → create an app
 3. For messages people send: App → WhatsApp → Configuration → Webhook URL `https://hamsafar.website/api/whatsapp/webhook`, any verify token you choose (`WHATSAPP_VERIFY_TOKEN`), subscribe to **messages**; App settings → Basic → App secret → `WHATSAPP_APP_SECRET`.
 4. Add the variables in Vercel and redeploy. `PHONE_VERIFICATION=off` turns checks off again without deleting anything.
 
+### WhatsApp inbox (Admin → WhatsApp)
+
+- Everything people send to the business number (texts, photos, voice notes, videos, files, locations, contacts) appears in **Admin → WhatsApp**, one conversation per person, with unread counts. Verification codes stay out of it.
+- Photos, voice notes and files are copied into the database when they arrive (up to 8 MB; bigger ones are fetched from WhatsApp when opened, which keeps them 30 days). Only super admins can open them.
+- Reply with text or an attached photo / audio / video / file (up to 4 MB). WhatsApp allows free replies only within 24 hours of the person's last message. Ticks show sent / delivered / read, and opening a chat sends the person blue ticks.
+- Every new message sends a push notification to the admin's devices (turn it on from Admin → WhatsApp or Admin → Verifications); tapping it opens the conversation.
+- **Admin → WhatsApp → Setup** checks the Meta setup and connects the WhatsApp Business Account to the app.
+
 ### Driver ratings
 
 - An hour after a ride leaves, the rider's booking turns into **"How was your ride with …?"**: 1 to 5 stars and an optional comment. From another phone, "Travelled with …? Rate the ride" asks for the phone number and booking code.

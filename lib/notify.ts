@@ -32,11 +32,11 @@ export async function savePushSubscription(adminId: number, sub: unknown) {
  * a WhatsApp message if ADMIN_WHATSAPP and WHATSAPP_ALERT_TEMPLATE (a "Utility" template with {{1}}) are set.
  * Never throws: a failed alert mustn't fail the person's submission.
  */
-export async function alertAdmins(title: string, body: string, path: string) {
+export async function alertAdmins(title: string, body: string, path: string, tag = "hamsafar-admin") {
   const db = requireDb();
   try {
     const [keys, subs] = await Promise.all([vapidKeys(), db.select().from(s.pushSubscriptions)]);
-    const payload = JSON.stringify({ title, body, url: path });
+    const payload = JSON.stringify({ title, body, url: path, tag });
     await Promise.all(
       subs.map((sub) =>
         webpush

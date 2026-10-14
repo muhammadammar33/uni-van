@@ -71,6 +71,13 @@
       "when": 1791976683247,
       "tag": "0009_ride_trips",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791997585149,
+      "tag": "0010_wa_inbox",
+      "breakpoints": true
     }
   ]
 }

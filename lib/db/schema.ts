@@ -424,6 +424,48 @@ export const appSettings = pgTable("app_settings", {
   value: text("value").notNull(),
 });
 
+/**
+ * WhatsApp messages to and from the business number (the admin inbox). Verification codes aren't kept.
+ * `waId` is the other person's number (digits with country code).
+ */
+export const waMessages = pgTable(
+  "wa_messages",
+  {
+    id: serial("id").primaryKey(),
+    waId: text("wa_id").notNull(),
+    /** Their WhatsApp profile name, when WhatsApp sends it. */
+    name: text("name"),
+    direction: text("direction").$type<"in" | "out">().notNull(),
+    /** text, image, audio, video, document, sticker, location, contacts, reaction, ... */
+    type: text("type").notNull(),
+    /** The text, or a photo's caption, or a short description for other kinds. */
+    body: text("body"),
+    /** WhatsApp's id for the message (to skip repeats and follow delivery). */
+    waMessageId: text("wa_message_id").unique(),
+    /** Outgoing: sent, delivered, read or failed. */
+    status: text("status"),
+    error: text("error"),
+    mediaId: text("media_id"),
+    mime: text("mime"),
+    fileName: text("file_name"),
+    /** Admin who sent it (outgoing). */
+    adminId: integer("admin_id").references(() => admins.id, { onDelete: "set null" }),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt,
+  },
+  (t) => [index("wa_messages_wa_id_idx").on(t.waId, t.createdAt)],
+);
+
+/** A message's photo / voice note / file, saved when it arrives (WhatsApp's own links expire). */
+export const waMedia = pgTable("wa_media", {
+  messageId: integer("message_id")
+    .primaryKey()
+    .references(() => waMessages.id, { onDelete: "cascade" }),
+  mime: text("mime").notNull(),
+  /** base64 */
+  data: text("data").notNull(),
+});
+
 /** Attempt counters for rate limits (sign-in, booking codes, ride creation). Keys never hold raw IP addresses. */
 export const rateLimits = pgTable("rate_limits", {
   key: text("key").primaryKey(),
@@ -437,3 +479,4 @@ export type RideBooking = typeof rideBookings.$inferSelect;
 export type DriverReview = typeof driverReviews.$inferSelect;
 export type Feedback = typeof feedback.$inferSelect;
 export type Identity = typeof identities.$inferSelect;
+export type WaMessage = typeof waMessages.$inferSelect;
