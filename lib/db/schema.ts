@@ -226,6 +226,10 @@ export const rideBookings = pgTable(
     pickupIdx: integer("pickup_idx").notNull(),
     dropIdx: integer("drop_idx").notNull(),
     code: text("code").notNull(),
+    /** When the rider typed the driver's ride code in the car (the right driver), or null. */
+    boardedAt: timestamp("boarded_at", { withTimezone: true }),
+    /** Wrong ride codes typed; the check stops after a few. */
+    boardTries: integer("board_tries").default(0).notNull(),
     createdAt,
   },
   (t) => [uniqueIndex("ride_bookings_ride_date_phone_uq").on(t.rideId, t.date, t.phone), index("ride_bookings_ride_date_idx").on(t.rideId, t.date)],

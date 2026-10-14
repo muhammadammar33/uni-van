@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CircleCheckBig, Clock, Copy, MessageCircle, MessageSquareHeart, Navigation, Pause, Pencil, Phone, Play, Radio, Send, Star, Trash2, X } from "lucide-react";
+import { CircleCheckBig, Clock, Copy, KeyRound, MessageCircle, MessageSquareHeart, Navigation, Pause, Pencil, Phone, Play, Radio, Send, Star, Trash2, X } from "lucide-react";
 import { CopyButton } from "@/components/admin/CopyButton";
 import { MapView } from "@/components/carpool/MapView";
 import { rememberRide, RideForm, type RideFormValues } from "@/components/carpool/RideForm";
@@ -226,12 +226,23 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
             const list = byDate.get(d) ?? [];
             return (
               <div key={d}>
-                <div className="mb-1 flex items-baseline justify-between border-b border-slate-100 pb-1">
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-slate-100 pb-1">
                   <span className="font-semibold">{dayWord(d)}</span>
                   <span className="text-sm text-slate-500">
                     {seatsOn(d)}/{ride.seats} seats booked
                   </span>
                 </div>
+                {list.length > 0 && data.rideCodes[d] && (
+                  <div className="my-2 flex items-center gap-3 rounded-xl bg-brand-lt/40 px-3 py-2">
+                    <KeyRound className="size-5 shrink-0 text-brand" />
+                    <div className="min-w-0 flex-1 text-xs text-slate-600">
+                      <b className="text-ink">Ride code</b>: tell it to each rider as they get in. It shows them you&apos;re their driver.
+                    </div>
+                    <span className="font-mono text-2xl font-extrabold tracking-[0.2em] text-brand-dk" aria-label={`Ride code for ${dayWord(d)}`}>
+                      {data.rideCodes[d]}
+                    </span>
+                  </div>
+                )}
                 {list.length === 0 ? (
                   <p className="py-1.5 text-sm text-slate-400">Nobody yet</p>
                 ) : (
@@ -240,9 +251,12 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
                       <li key={b.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
                         <GenderIcon gender={b.gender} className={`size-4 shrink-0 ${b.gender === "female" ? "text-female" : "text-male"}`} />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate font-semibold">
-                            {b.name}
-                            {b.seats > 1 && <span className="font-normal text-slate-500"> · {b.seats} seats</span>}
+                          <div className="flex items-center gap-1.5 font-semibold">
+                            <span className="truncate">
+                              {b.name}
+                              {b.seats > 1 && <span className="font-normal text-slate-500"> · {b.seats} seats</span>}
+                            </span>
+                            {b.boarded && <span className="shrink-0 rounded-full bg-emerald-50 px-2 text-xs font-bold text-emerald-700">On board ✓</span>}
                           </div>
                           <div className="truncate text-xs text-slate-500">
                             {b.pickup} → {b.drop}

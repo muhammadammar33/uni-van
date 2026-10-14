@@ -20,6 +20,7 @@ Live at **[hamsafar.website](https://hamsafar.website)**.
 - People are told it's checked **within 24 hours**. Admins get an instant notification (web push to their phone or computer, turned on from **Admin → Verifications**; optionally WhatsApp, see below), and the list counts down the hours left.
 - **Admin → Verifications** (super admins): waiting / approved / turned down, search by name, CNIC, parent's CNIC or phone, each person's photos, details, rides and bookings, links to the official licence and vehicle checks (NADRA has no public API, so the CNIC is checked by eye against the selfie), approve or turn down with a reason, and delete someone's ID data. Every photo view is logged.
 - Photos are encrypted (AES-256-GCM) in the database and only super admins can open them. Approved drivers get an "ID verified" badge. `/privacy` explains all of this.
+- **Ride code (is this my driver?)**: the driver's private page shows a 4-digit ride code for each day (different every ride and day, never shown to riders). When a rider gets in, the driver tells them the code and the rider types it on their ticket: a match shows "Right driver: you're on board" and the driver sees them as **On board ✓**; a wrong code warns "Don't get in" with the police number. Only on the day of the booking, and the check locks after 5 wrong codes.
 - **Share my trip**: a rider's ticket has a button that sends family the driver, car, number plate, trip and a link where they can follow the car live.
 
 ### Drivers (no account)

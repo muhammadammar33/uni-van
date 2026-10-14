@@ -9,6 +9,7 @@ import { usePhoneVerify, VerifiedHint } from "@/components/carpool/PhoneVerify";
 import { RateDriver } from "@/components/carpool/RateDriver";
 import { RatingBadge, Stars, VerifiedBadge } from "@/components/carpool/Stars";
 import { ShareTrip } from "@/components/carpool/ShareTrip";
+import { BoardCheck } from "@/components/carpool/BoardCheck";
 import { useMyLocation } from "@/components/carpool/useMyLocation";
 import { GenderIcon } from "@/components/SeatMap";
 import { displayPhone, formatDate, formatFare, formatTime, normalizePhone, todayLocal } from "@/lib/format";
@@ -218,7 +219,7 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
       {past && <RateDriver slug={slug} booking={past.booking} review={past.review} onSaved={(review) => { setPast({ ...past, review }); refresh(); }} />}
 
       {booking ? (
-        <Ticket booking={booking} onCancel={cancel} busy={busy} slug={slug} verified={ride.verified} />
+        <Ticket booking={booking} onCancel={cancel} onBoarded={setBooking} busy={busy} slug={slug} verified={ride.verified} />
       ) : ride.status !== "active" ? (
         <div className="card text-center font-semibold">{ride.status === "paused" ? "The driver has paused this ride for now." : "This ride was cancelled by the driver."}</div>
       ) : open.length === 0 ? (
@@ -364,7 +365,21 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
   );
 }
 
-function Ticket({ booking, onCancel, busy, slug, verified }: { booking: RideBookingView; onCancel: () => void; busy: boolean; slug: string; verified: boolean }) {
+function Ticket({
+  booking,
+  onCancel,
+  onBoarded,
+  busy,
+  slug,
+  verified,
+}: {
+  booking: RideBookingView;
+  onCancel: () => void;
+  onBoarded: (b: RideBookingView) => void;
+  busy: boolean;
+  slug: string;
+  verified: boolean;
+}) {
   const msg = `Assalam o Alaikum ${booking.driverName.split(" ")[0]}, I booked ${booking.seats > 1 ? `${booking.seats} seats` : "a seat"} on your Hamsafar ride on ${formatDate(booking.date)}: ${booking.pickup} → ${booking.drop} at ${formatTime(booking.departTime)}. Name: ${booking.name}. Code ${booking.code}.`;
   return (
     <section className="animate-rise overflow-hidden rounded-3xl bg-white shadow-lift">
@@ -378,6 +393,9 @@ function Ticket({ booking, onCancel, busy, slug, verified }: { booking: RideBook
         </div>
       </div>
       <dl className="grid grid-cols-2 gap-4 p-5">
+        <div className="col-span-2">
+          <BoardCheck slug={slug} booking={booking} onBoarded={onBoarded} />
+        </div>
         <div className="col-span-2">
           <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Your trip</dt>
           <dd className="font-bold">

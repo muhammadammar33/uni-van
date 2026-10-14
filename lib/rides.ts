@@ -1,5 +1,5 @@
 import "server-only";
-import { randomBytes, randomInt } from "node:crypto";
+import { createHmac, randomBytes, randomInt } from "node:crypto";
 import { and, asc, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireDb, schema as s } from "@/lib/db";
@@ -360,7 +360,22 @@ export type RideBookingView = {
   driverName: string;
   car: string;
   plate: string | null;
+  /** The rider checked the driver's ride code in the car. */
+  boarded: boolean;
+  /** Wrong ride codes left before the check stops. */
+  codeTriesLeft: number;
 };
+
+const BOARD_TRIES = 5;
+
+/**
+ * The 4-digit code a driver tells each rider when they get in, different for every ride and day.
+ * Derived from the server secret, so it isn't stored and can't be guessed from the ride's links.
+ */
+export function rideCode(rideId: number, date: string) {
+  const h = createHmac("sha256", `hamsafar-ride-code:${process.env.AUTH_SECRET ?? ""}`).update(`${rideId}:${date}`).digest();
+  return String(1000 + (h.readUInt32BE(0) % 9000));
+}
 
 function bookingView(r: s.Ride, pts: s.RidePoint[], b: s.RideBooking): RideBookingView {
   return {
@@ -377,6 +392,8 @@ function bookingView(r: s.Ride, pts: s.RidePoint[], b: s.RideBooking): RideBooki
     driverName: r.driverName,
     car: r.car,
     plate: r.plate,
+    boarded: !!b.boardedAt,
+    codeTriesLeft: Math.max(0, BOARD_TRIES - b.boardTries),
   };
 }
 
@@ -464,6 +481,34 @@ export async function cancelRideBooking(slug: string, phone: string, code: strin
   await requireDb().delete(s.rideBookings).where(eq(s.rideBookings.id, f.upcoming.id));
 }
 
+/**
+ * In the car: the rider types the ride code the driver tells them. A match proves it's the driver they
+ * booked; a wrong code warns them not to get in. Only on the day of the booking, and a few tries only.
+ */
+export async function boardRide(slug: string, phone: string, code: string, rawRideCode: unknown) {
+  const f = await findBookings(slug, phone, code);
+  const today = todayLocal();
+  const b = [f?.upcoming, f?.past].find((x) => x?.date === today);
+  if (!f || !b) throw new BookingError("No booking for today found for that phone number and code.", 404);
+  if (b.boardedAt) return bookingView(f.ride, f.pts, b);
+  if (b.boardTries >= BOARD_TRIES)
+    throw new BookingError("Too many wrong codes. Don't get in: call the driver on the number in your booking, or 15 if you feel unsafe.", 429, { code: "board_locked", triesLeft: 0 });
+  const given = String(rawRideCode ?? "").replace(/\D/g, "");
+  const db = requireDb();
+  if (given !== rideCode(f.ride.id, b.date)) {
+    // Atomic, so tries can't be raced past the limit.
+    const [row] = await db
+      .update(s.rideBookings)
+      .set({ boardTries: sql`${s.rideBookings.boardTries} + 1` })
+      .where(eq(s.rideBookings.id, b.id))
+      .returning({ tries: s.rideBookings.boardTries });
+    const triesLeft = Math.max(0, BOARD_TRIES - row.tries);
+    throw new BookingError("That code doesn't match. Don't get in: this may not be the driver you booked.", 400, { code: "wrong_ride_code", triesLeft });
+  }
+  const [row] = await db.update(s.rideBookings).set({ boardedAt: new Date() }).where(eq(s.rideBookings.id, b.id)).returning();
+  return bookingView(f.ride, f.pts, row);
+}
+
 /* ---------- Driver reviews ---------- */
 
 export const reviewInput = z.object({
@@ -531,7 +576,10 @@ export async function manageRide(token: string) {
       pickup: pts[b.pickupIdx]?.name ?? "",
       drop: pts[b.dropIdx]?.name ?? "",
       pickupIdx: b.pickupIdx,
+      boarded: !!b.boardedAt,
     })),
+    /** The code to tell riders as they get in, for each upcoming day. */
+    rideCodes: Object.fromEntries([...new Set([...runs.slice(0, 7), ...bookings.map((b) => b.date)])].map((d) => [d, rideCode(r.id, d)])),
   };
 }
 export type ManageData = NonNullable<Awaited<ReturnType<typeof manageRide>>>;
