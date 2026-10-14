@@ -105,19 +105,28 @@ export async function verificationStatus(idRaw: unknown) {
 }
 
 /** A WhatsApp message reached the webhook: if it carries a pending code from the same number, that number is verified. */
-export async function receivedMessage(from: string, text: string) {
+export async function receivedMessage(from: string, text: string): Promise<"verified" | "no_code" | "wrong_number" | "no_match"> {
   const phone = normalizePhone(from);
   const code = text.match(/\b(\d{6})\b/)?.[1];
-  if (!phone || !code) return false;
+  if (!phone || !code) return "no_code";
   const db = requireDb();
+  const open = and(eq(s.phoneVerifications.method, "message"), isNull(s.phoneVerifications.verifiedAt), gt(s.phoneVerifications.expiresAt, new Date()));
   const pending = await db
     .select()
     .from(s.phoneVerifications)
-    .where(and(eq(s.phoneVerifications.phone, phone), eq(s.phoneVerifications.method, "message"), isNull(s.phoneVerifications.verifiedAt), gt(s.phoneVerifications.expiresAt, new Date())));
+    .where(and(eq(s.phoneVerifications.phone, phone), open));
   const match = pending.find((p) => hash(p.id, code) === p.codeHash);
-  if (!match) return false;
+  if (!match) {
+    // A real code sent from another WhatsApp number: say which number it's for (the code only counts from that one).
+    const others = await db.select().from(s.phoneVerifications).where(open).limit(500);
+    const other = others.find((p) => hash(p.id, code) === p.codeHash);
+    if (!other) return "no_match";
+    const shown = `0${other.phone.slice(2, 5)} ${other.phone.slice(5)}`;
+    await sendText(phone, `This code is for ${shown}. Please send it from the WhatsApp on ${shown}, or go back to Hamsafar and enter this number instead.`).catch(() => {});
+    return "wrong_number";
+  }
   await db.update(s.phoneVerifications).set({ verifiedAt: new Date() }).where(eq(s.phoneVerifications.id, match.id));
   await sendText(phone, "✅ Your number is verified. Go back to Hamsafar to continue.").catch(() => {});
   if (Math.random() < 0.05) await db.execute(sql`delete from phone_verifications where expires_at < now() - interval '1 day'`);
-  return true;
+  return "verified";
 }
