@@ -32,6 +32,8 @@ export async function waSetup(extraWaba?: string) {
   const tok = await graph<{ data: { granular_scopes?: { scope: string; target_ids?: string[] }[] } }>(`debug_token?input_token=${encodeURIComponent(env("WHATSAPP_TOKEN"))}`);
   const ids = new Set<string>(extraWaba ? [extraWaba] : []);
   if (tok.ok) for (const g of tok.data.data.granular_scopes ?? []) if (g.scope.startsWith("whatsapp_business")) for (const id of g.target_ids ?? []) ids.add(id);
+  // Some tokens list the phone number itself rather than its account: that isn't an account.
+  ids.delete(phoneId);
   const wabas: Waba[] = await Promise.all(
     [...ids].map(async (id) => ({
       id,
@@ -45,5 +47,6 @@ export async function waSetup(extraWaba?: string) {
 /** Makes this WhatsApp Business Account send its messages to this app's webhook. */
 export async function subscribeWaba(wabaId: string) {
   if (!/^\d{5,25}$/.test(wabaId)) return { ok: false as const, error: "That isn't a WhatsApp Business Account ID." };
+  if (wabaId === env("WHATSAPP_PHONE_NUMBER_ID")) return { ok: false as const, error: "That's the phone number ID. Enter the WhatsApp Business Account ID instead." };
   return graph<{ success?: boolean }>(`${wabaId}/subscribed_apps`, "POST");
 }

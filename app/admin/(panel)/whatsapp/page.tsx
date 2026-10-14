@@ -68,7 +68,12 @@ export default async function WhatsAppAdminPage({ searchParams }: PageProps<"/ad
         <section className="card mt-4">
           <h2 className="font-bold">WhatsApp Business Accounts</h2>
           <p className="text-sm text-slate-600">The account that holds your number must send its messages to this app. If it says &ldquo;not connected&rdquo;, press Connect.</p>
-          {setup.wabas.length === 0 && <p className="mt-2 text-sm text-slate-500">None found from the token. Enter the account ID below (WhatsApp Manager → account settings).</p>}
+          {setup.wabas.length === 0 && (
+            <p className="mt-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+              Enter your WhatsApp Business Account ID below (not the phone number ID). It&apos;s shown in the Meta app under <b>Step 2. Production setup</b> or <b>API Setup</b> next to your
+              number, and in WhatsApp Manager under the account&apos;s settings.
+            </p>
+          )}
           <ul className="mt-2 space-y-3">
             {setup.wabas.map((w) => {
               const numbers = w.numbers.ok ? w.numbers.data.data : [];
