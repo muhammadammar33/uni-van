@@ -99,7 +99,13 @@ function toYmd(d: string) {
 export function parseCnicFront(text: string) {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const num = text.match(/\b(\d{5})\s*[-–]?\s*(\d{7})\s*[-–]?\s*(\d)\b/);
-  const dates = [...text.matchAll(/\b\d{2}[.\-/ ]\d{2}[.\-/ ]\d{4}\b/g)].map((m) => toYmd(m[0])!).filter(Boolean);
+  // Scans sometimes split a date's first digit off ("1\n7.06.2003"), so a lone digit just before one is joined.
+  const dates = [...text.matchAll(/(?<!\d)(\d)?\s*(\d{1,2})[.\-/ ](\d{2})[.\-/ ](\d{4})\b/g)]
+    .map((m) => {
+      const day = ((m[1] ?? "") + m[2]).slice(-2).padStart(2, "0");
+      return toYmd(`${day}.${m[3]}.${m[4]}`);
+    })
+    .filter((d): d is string => !!d && isDate(d));
   // Labels can have scan noise before them (the photo's edge), so text up to the label is dropped.
   const after = (label: RegExp, not?: RegExp) => {
     const i = lines.findIndex((l) => label.test(l) && !not?.test(l));
@@ -107,9 +113,21 @@ export function parseCnicFront(text: string) {
     const rest = lines[i].slice(lines[i].search(label)).replace(label, "").replace(/^[\s:.\-]+/, "").trim();
     const v = rest.length > 2 ? rest : (lines[i + 1] ?? "");
     const name = v.replace(/[^A-Za-z .'-]/g, "").replace(/\s+/g, " ").trim();
-    return name.length > 2 ? name.replace(/\b\w+/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase()) : null;
+    // Scan noise ("Oom Oo P Re") isn't a name: every word needs a vowel and 2+ letters, and 2+ real words.
+    const words = name.split(" ");
+    const real = words.length >= 2 && words.every((w) => w.length >= 2 && /[aeiouy]/i.test(w)) && words.filter((w) => w.length >= 3).length >= 2;
+    return real ? name.replace(/\b\w+/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase()) : null;
   };
-  const sorted = [...dates].sort();
+  const sorted = [...new Set(dates)].sort();
+  // A CNIC holder is at least 18, so a recent date (the issue date) can't be the birth date.
+  const thisYear = new Date().getFullYear();
+  const birth = sorted.find((d) => Number(d.slice(0, 4)) <= thisYear - 15) ?? null;
+  let expiry = sorted.length >= 2 && sorted[sorted.length - 1] !== birth ? sorted[sorted.length - 1] : null;
+  // A CNIC is valid for 10 years from its issue date (same day and month). If the expiry shares the issue
+  // date's day and month but not the year, one of its digits was misread (2034 read as 2038).
+  const issue = sorted.filter((d) => d !== birth && d !== expiry && (!birth || d > birth)).pop();
+  if (issue && expiry && issue.slice(5) === expiry.slice(5) && Number(expiry.slice(0, 4)) - Number(issue.slice(0, 4)) !== 10)
+    expiry = `${Number(issue.slice(0, 4)) + 10}${issue.slice(4)}`;
   // "Gender" is a heading; the letter is on the same line or starts the next one ("M Pakistan").
   const gi = lines.findIndex((l) => /\bGender\b/i.test(l));
   const g =
@@ -121,8 +139,8 @@ export function parseCnicFront(text: string) {
     name: after(/\bName\b/i, /(Father|Husband)/i),
     fatherName: after(/\b(Father|Husband)\s*Name\b/i),
     gender: g === "M" ? ("male" as const) : g === "F" ? ("female" as const) : null,
-    // Birth is the earliest date, expiry the latest.
-    dob: sorted[0] ?? null,
-    expiry: sorted.length >= 2 ? sorted[sorted.length - 1] : null,
+    // Birth is the earliest date (and old enough), expiry the latest.
+    dob: birth,
+    expiry,
   };
 }

@@ -43,32 +43,177 @@ async function compress(file: File, max: number): Promise<string> {
   return c.toDataURL("image/jpeg", 0.5);
 }
 
-/** Reads the English side of a CNIC on the phone itself (nothing is sent anywhere for this). */
+type Box = { x: number; y: number; w: number; h: number };
+
 /**
- * Reads the CNIC's front on this phone. The reader's files come from this site (public/ocr), not a CDN that
- * might be blocked, and it gives up after 30 seconds: reading is only a help, the person can always type.
+ * Where the card is in the photo. A card is full of print and pattern while a table or cloth around it is
+ * smooth, so it's the area with the most fine detail (brightness alone fails: lighting makes cloth as
+ * bright as the card). Falls back to the whole photo.
  */
-async function readCard(dataUrl: string, onProgress: (pct: number) => void) {
+function findCard(bmp: ImageBitmap): Box {
+  const W = 300;
+  const H = Math.max(1, Math.round((W * bmp.height) / bmp.width));
+  // Shrink by halves: one big jump makes cloth texture look like detail (aliasing).
+  let src: CanvasImageSource = bmp;
+  let sw = bmp.width;
+  let sh = bmp.height;
+  while (sw / 2 > W) {
+    const half = document.createElement("canvas");
+    half.width = Math.round(sw / 2);
+    half.height = Math.round(sh / 2);
+    const hctx = half.getContext("2d")!;
+    hctx.imageSmoothingQuality = "high";
+    hctx.drawImage(src, 0, 0, half.width, half.height);
+    [src, sw, sh] = [half, half.width, half.height];
+  }
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext("2d", { willReadFrequently: true })!;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(src, 0, 0, W, H);
+  const px = ctx.getImageData(0, 0, W, H).data;
+  const g = new Float64Array(W * H);
+  for (let i = 0; i < W * H; i++) g[i] = px[i * 4] * 0.299 + px[i * 4 + 1] * 0.587 + px[i * 4 + 2] * 0.114;
+  // Integral images of g and g², for the spread of brightness in every 5×5 square.
+  const S = new Float64Array((W + 1) * (H + 1));
+  const Q = new Float64Array((W + 1) * (H + 1));
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      const v = g[y * W + x];
+      const i = (y + 1) * (W + 1) + x + 1;
+      S[i] = v + S[i - 1] + S[i - W - 1] - S[i - W - 2];
+      Q[i] = v * v + Q[i - 1] + Q[i - W - 1] - Q[i - W - 2];
+    }
+  const rowHits = new Array(H).fill(0);
+  const colHits = new Array(W).fill(0);
+  for (let y = 2; y < H - 2; y++)
+    for (let x = 2; x < W - 2; x++) {
+      const a = (y - 2) * (W + 1) + (x - 2);
+      const b = (y + 3) * (W + 1) + (x + 3);
+      const c2 = (y - 2) * (W + 1) + (x + 3);
+      const d = (y + 3) * (W + 1) + (x - 2);
+      const sum = S[b] - S[c2] - S[d] + S[a];
+      const sq = Q[b] - Q[c2] - Q[d] + Q[a];
+      const sd = Math.sqrt(Math.max(0, sq / 25 - (sum / 25) ** 2));
+      if (sd > 10) {
+        rowHits[y]++;
+        colHits[x]++;
+      }
+    }
+  const rows = rowHits.flatMap((n, y) => (n / W > 0.12 ? [y] : []));
+  const cols = colHits.flatMap((n, x) => (n / H > 0.12 ? [x] : []));
+  const whole = { x: 0, y: 0, w: bmp.width, h: bmp.height };
+  if (rows.length < H * 0.15 || cols.length < W * 0.15) return whole;
+  const k = bmp.width / W;
+  const pad = 8;
+  const x0 = Math.max(0, (cols[0] - pad) * k);
+  const y0 = Math.max(0, (rows[0] - pad) * k);
+  const x1 = Math.min(bmp.width, (cols[cols.length - 1] + pad) * k);
+  const y1 = Math.min(bmp.height, (rows[rows.length - 1] + pad) * k);
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+/**
+ * The card made easy to read: cropped, turned by `deg` (90, 180, 270) for cards photographed sideways or
+ * upside down, about 1600 pixels across, in grey with the contrast stretched (the green pattern fades).
+ */
+function prepare(bmp: ImageBitmap, box: Box, deg: number): HTMLCanvasElement {
+  const side = deg % 180 !== 0;
+  const scale = Math.min(2, 1600 / Math.max(box.w, box.h));
+  const w = Math.round(box.w * scale);
+  const h = Math.round(box.h * scale);
+  const c = document.createElement("canvas");
+  c.width = side ? h : w;
+  c.height = side ? w : h;
+  const ctx = c.getContext("2d", { willReadFrequently: true })!;
+  ctx.imageSmoothingQuality = "high";
+  ctx.translate(c.width / 2, c.height / 2);
+  ctx.rotate((deg * Math.PI) / 180);
+  ctx.drawImage(bmp, box.x, box.y, box.w, box.h, -w / 2, -h / 2, w, h);
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  const px = img.data;
+  const hist = new Array(256).fill(0);
+  for (let p = 0; p < px.length; p += 4) {
+    const v = Math.round(px[p] * 0.299 + px[p + 1] * 0.587 + px[p + 2] * 0.114);
+    px[p] = v;
+    hist[v]++;
+  }
+  // Stretch so the darkest and lightest 2% become black and white.
+  const cut = (px.length / 4) * 0.02;
+  let lo = 0;
+  let hi = 255;
+  for (let n = 0; lo < 255 && (n += hist[lo]) < cut; ) lo++;
+  for (let n = 0; hi > 0 && (n += hist[hi]) < cut; ) hi--;
+  const range = Math.max(1, hi - lo);
+  for (let p = 0; p < px.length; p += 4) px[p] = px[p + 1] = px[p + 2] = Math.max(0, Math.min(255, ((px[p] - lo) * 255) / range));
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/** How much a reading found: the number and dates count most. */
+const score = (r: ReturnType<typeof parseCnicFront>) => (r.idNumber ? 3 : 0) + (r.dob ? 2 : 0) + (r.expiry ? 1 : 0) + (r.name ? 1 : 0) + (r.gender ? 1 : 0);
+
+/**
+ * Reads the English side of a CNIC on the phone itself (nothing is sent anywhere for this), from the
+ * original photo: finds the card, crops it, and tries it both ways round. The reader's files come from
+ * this site (public/ocr), not a CDN that might be blocked. Gives up after 45 seconds: reading is only a help.
+ */
+async function readCard(file: File, onProgress: (pct: number) => void) {
   const { createWorker } = await import("tesseract.js");
   const base = `${window.location.origin}/ocr/5.1.1`;
   let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("timeout")), 30000)));
+  const timeout = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("timeout")), 45000)));
   try {
     return await Promise.race([
       (async () => {
+        // For checking the reader on a phone: localStorage["hamsafar:ocr-debug"] = "1" logs timings and text.
+        const debug = (() => {
+          try {
+            return localStorage.getItem("hamsafar:ocr-debug") === "1";
+          } catch {
+            return false;
+          }
+        })();
+        const t0 = performance.now();
+        const log = (...a: unknown[]) => debug && console.log(`[ocr ${Math.round(performance.now() - t0)}ms]`, ...a);
+        const bmp = await createImageBitmap(file);
+        const box = findCard(bmp);
+        log("photo", bmp.width, bmp.height, "card", box);
         worker = await createWorker("eng", 1, {
           workerPath: `${base}/worker.min.js`,
           corePath: base,
           langPath: base,
           logger: (m: { status: string; progress: number }) => {
-            // Loading the reader is the first half, reading the card the second.
-            const done = m.status === "recognizing text" ? 50 + m.progress * 50 : Math.min(49, m.progress * 45);
-            onProgress(Math.round(done));
+            // Loading the reader is the first part, then each way round the card is tried.
+            if (m.status !== "recognizing text") onProgress(Math.round(Math.min(29, m.progress * 29)));
           },
         });
-        const { data } = await worker.recognize(dataUrl);
-        return parseCnicFront(data.text);
+        // A card is wider than tall: a tall card was photographed sideways.
+        const turns = box.h > box.w ? [270, 90] : [0, 180];
+        let best: ReturnType<typeof parseCnicFront> | null = null;
+        let bestTurn = turns[0];
+        for (const [i, deg] of turns.entries()) {
+          onProgress(30 + i * 30);
+          const canvas = prepare(bmp, box, deg);
+          log("turn", deg, canvas.width, canvas.height);
+          const { data } = await worker.recognize(canvas);
+          const r = parseCnicFront(data.text);
+          log("read", deg, JSON.stringify(r), data.text);
+          if (!best || score(r) > score(best)) [best, bestTurn] = [r, deg];
+          if (best.idNumber && best.dob) break;
+        }
+        // Still no number or birth date: once more the best way round, looking for scattered words instead of lines.
+        if (!best!.idNumber || !best!.dob) {
+          onProgress(90);
+          await worker.setParameters({ tessedit_pageseg_mode: "11" as never });
+          const { data } = await worker.recognize(prepare(bmp, box, bestTurn));
+          const r = parseCnicFront(data.text);
+          best = { ...r, ...Object.fromEntries(Object.entries(best!).filter(([, v]) => v)) } as typeof r;
+        }
+        bmp.close();
+        return best!;
       })(),
       timeout,
     ]);
@@ -166,7 +311,7 @@ function IdDialog({ role, prefill, status, onDone }: { role: Mode; prefill: IdPr
         setReadPct(0);
         setReadFailed(false);
         try {
-          const r = await readCard(url, setReadPct);
+          const r = await readCard(file, setReadPct);
           if (!r.idNumber && !r.dob) setReadFailed(true);
           setScanned({ idNumber: r.idNumber, name: r.name });
           // Fill only what's still empty: what the person typed wins.

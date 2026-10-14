@@ -65,3 +65,29 @@ test("card scan: noise before labels (what the scanner really read)", () => {
   );
   assert.deepEqual(r, { idNumber: "3740524681357", name: "Bilal Ahmed Qureshi", fatherName: "Ahmed Qureshi", gender: "male", dob: "1992-08-14", expiry: "2031-01-10" });
 });
+
+test("card scan: split date digit, and the issue date isn't taken as the birth date", () => {
+  const r = parseCnicFront(
+    "Name\nMuhammad Ammar Cheema\nFather Name\nZulfigar Ali Cheema\nGender\nM\nCountry of Stay\nPakistan\nIdentity Number\nate of Bath\n31203-3135778-5\n1\n7.06.2003\nDate of Issue\nDate of Xpary\n19.03.2024\n19.03.2034",
+  );
+  assert.equal(r.idNumber, "3120331357785");
+  assert.equal(r.dob, "2003-06-17");
+  assert.equal(r.expiry, "2034-03-19");
+  // Only the issue and expiry dates read: no birth date rather than a wrong one.
+  assert.equal(parseCnicFront("19.03.2024 19.03.2034").dob, null);
+});
+
+test("card scan: an expiry digit misread is put right from the issue date (10 years)", () => {
+  const r = parseCnicFront("Identity Number Date of Birth\n31203-3135725-5 17.06.2003\nDate of Issue Date of Expiry\n19.03.2024 19.03.2038");
+  assert.equal(r.dob, "2003-06-17");
+  assert.equal(r.expiry, "2034-03-19");
+  // A different day or month isn't touched.
+  assert.equal(parseCnicFront("17.06.2003 19.03.2024 20.05.2031").expiry, "2031-05-20");
+});
+
+test("card scan: noise isn't taken as a name", () => {
+  assert.equal(parseCnicFront("Father Name\nOom Oo P Re").fatherName, null);
+  assert.equal(parseCnicFront("Father Name\nPr Ere").fatherName, null);
+  assert.equal(parseCnicFront("Father Name\nZulfiqar Ali Cheema").fatherName, "Zulfiqar Ali Cheema");
+  assert.equal(parseCnicFront("Name\nMuhammad Ammar Cheema").name, "Muhammad Ammar Cheema");
+});
