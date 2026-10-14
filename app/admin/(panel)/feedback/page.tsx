@@ -68,7 +68,7 @@ export default async function FeedbackAdminPage({ searchParams }: PageProps<"/ad
                     About ride /r/{m.rideSlug}
                   </Link>
                 )}
-                {m.page && !m.rideSlug && <span>Sent from {m.page}</span>}
+                {m.page && !m.rideSlug && <span>Sent from {m.page === "/" ? "the home page" : m.page}</span>}
               </div>
               <div className="mt-3 flex gap-2">
                 <form action={setFeedbackStatus}>
