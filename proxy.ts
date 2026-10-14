@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
+import { envSiteUrl } from "@/lib/url";
 
 /**
  * 1. On the production deployment, visits to the old *.vercel.app address go to the site's own domain, once
@@ -9,7 +10,7 @@ import { SESSION_COOKIE, verifySession } from "@/lib/session";
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const host = req.headers.get("host") ?? "";
-  const site = process.env.SITE_URL?.replace(/\/$/, "");
+  const site = envSiteUrl();
   if (process.env.VERCEL_ENV === "production" && site && !site.includes(".vercel.app") && host.endsWith(".vercel.app"))
     return NextResponse.redirect(`${site}${pathname}${search}`, 308);
 
