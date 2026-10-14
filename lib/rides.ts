@@ -7,6 +7,7 @@ import { normalizePhone, nowLocal, todayLocal } from "@/lib/format";
 import { blur, distanceKm, matchRoute, type LatLng } from "@/lib/geo";
 import { GENDERS } from "@/lib/layout";
 import { BookingError } from "@/lib/trips";
+import { requireVerifiedPhone } from "@/lib/verify";
 import { nextRuns, runOver, runsOn, type Schedule } from "@/lib/schedule";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -73,8 +74,12 @@ function readRide(raw: unknown) {
   };
 }
 
+/** The phone-check token the browser sends along (see lib/verify.ts). */
+const tokenOf = (raw: unknown) => (raw && typeof raw === "object" ? (raw as { phoneToken?: unknown }).phoneToken : undefined);
+
 export async function createRide(raw: unknown) {
   const { ride, points } = readRide(raw);
+  await requireVerifiedPhone(tokenOf(raw), ride.driverPhone);
   if (ride.schedule === "once" && ride.date < todayLocal()) throw new BookingError("The date has already passed");
   const db = requireDb();
   return db.transaction(async (tx) => {
@@ -94,6 +99,8 @@ export async function updateRide(token: string, raw: unknown) {
   return db.transaction(async (tx) => {
     const [row] = await tx.select().from(s.rides).where(eq(s.rides.manageToken, token)).for("update");
     if (!row) throw new BookingError("Ride not found", 404);
+    // A new number for the driver has to be checked like the first one.
+    if (ride.driverPhone !== row.driverPhone) await requireVerifiedPhone(tokenOf(raw), ride.driverPhone);
     const upcoming = await tx
       .select()
       .from(s.rideBookings)
@@ -333,6 +340,7 @@ export async function bookRide(slug: string, raw: unknown): Promise<RideBookingV
   const input = parsed.data;
   const phone = normalizePhone(input.phone);
   if (!phone) throw new BookingError("Enter a valid phone number, e.g. 0300 1234567");
+  await requireVerifiedPhone(tokenOf(raw), phone);
   return requireDb().transaction(async (tx) => {
     const locked = await tx.execute<{ id: number }>(sql`select id from rides where slug = ${slug} for update`);
     if (!locked[0]) throw new BookingError("Ride not found", 404);

@@ -20,6 +20,20 @@ Live at **[hamsafar.website](https://hamsafar.website)**.
 3. The ride page (`/r/<slug>`) shows the route on a map and the driver's live position. Book with name, phone and gender. The booking shows the driver's number with one-tap WhatsApp (message already written) and call. A seat can be cancelled from the same browser or with phone + booking code.
 4. Rules: no double booking (locked transaction), one booking per phone per day, women-only / men-only rides enforced, seats can't be cut below what's already booked, and the route is locked once riders have booked.
 
+### WhatsApp number check
+
+Once WhatsApp is set up, offering a ride, booking a seat, and changing a driver's number all need a verified WhatsApp number (checked once per phone; the browser remembers it for 90 days). Two ways, either or both:
+
+- **We send a code** (`send`): a 6-digit code arrives on WhatsApp with a "Copy code" button; typed in, it's checked (5 tries, 10 minutes, at most 5 codes per number per hour). Meta charges a small fee per code message.
+- **They message us** (`message`, free): WhatsApp opens with "Hamsafar code 123456" ready to send to the business number; the message arriving from their number on the webhook proves it's theirs, and the page continues by itself.
+
+Setup ([Meta for Developers](https://developers.facebook.com/) → create an app → add **WhatsApp**):
+
+1. Add and verify your business phone number; copy its **Phone number ID** and create a permanent access token (System user in Business settings) → `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TOKEN`, and `WHATSAPP_BUSINESS_NUMBER` (digits with 92).
+2. For codes we send: WhatsApp Manager → Message templates → **Authentication** template with a "Copy code" button, e.g. named `hamsafar_otp`, language English → `WHATSAPP_OTP_TEMPLATE=hamsafar_otp`.
+3. For messages people send: App → WhatsApp → Configuration → Webhook URL `https://hamsafar.website/api/whatsapp/webhook`, any verify token you choose (`WHATSAPP_VERIFY_TOKEN`), subscribe to **messages**; App settings → Basic → App secret → `WHATSAPP_APP_SECRET`.
+4. Add the variables in Vercel and redeploy. `PHONE_VERIFICATION=off` turns checks off again without deleting anything.
+
 ### Driver ratings
 
 - An hour after a ride leaves, the rider's booking turns into **"How was your ride with …?"**: 1 to 5 stars and an optional comment. From another phone, "Travelled with …? Rate the ride" asks for the phone number and booking code.

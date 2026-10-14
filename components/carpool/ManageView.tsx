@@ -12,11 +12,12 @@ import { Stars } from "@/components/carpool/Stars";
 import { GenderIcon } from "@/components/SeatMap";
 import { displayPhone, formatDate, formatFare, formatTime, todayLocal } from "@/lib/format";
 import type { ManageData } from "@/lib/rides";
+import type { VerifyMode } from "@/lib/verify";
 import { addDays, describeSchedule } from "@/lib/schedule";
 
 const dayWord = (d: string) => (d === todayLocal() ? "Today" : d === addDays(todayLocal(), 1) ? "Tomorrow" : formatDate(d));
 
-export function ManageView({ token, data, isNew, saved }: { token: string; data: ManageData; isNew: boolean; saved: boolean }) {
+export function ManageView({ token, data, isNew, saved, verify = null }: { token: string; data: ManageData; isNew: boolean; saved: boolean; verify?: VerifyMode }) {
   const router = useRouter();
   const { ride, points, bookings, runs } = data;
   const [editing, setEditing] = useState(false);
@@ -116,7 +117,7 @@ export function ManageView({ token, data, isNew, saved }: { token: string; data:
         <button type="button" onClick={() => setEditing(false)} className="inline-flex items-center gap-1 text-sm font-semibold text-white">
           <X className="size-4" /> Close without saving
         </button>
-        <RideForm initial={formValues} token={token} lockedRoute={bookings.length > 0} onSaved={() => setEditing(false)} />
+        <RideForm initial={formValues} token={token} lockedRoute={bookings.length > 0} onSaved={() => setEditing(false)} verify={verify} />
       </div>
     );
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Car, CircleAlert, CircleCheckBig, Clock, MessageCircle, MessageSquareWarning, Phone, Radio, Share2, Star, Users, X } from "lucide-react";
 import { MapView, type MapMarker } from "@/components/carpool/MapView";
+import { usePhoneVerify, VerifiedHint } from "@/components/carpool/PhoneVerify";
 import { RateDriver } from "@/components/carpool/RateDriver";
 import { RatingBadge, Stars } from "@/components/carpool/Stars";
 import { useMyLocation } from "@/components/carpool/useMyLocation";
@@ -13,6 +14,7 @@ import { distanceKm, formatKm, nearestIndex } from "@/lib/geo";
 import type { Gender } from "@/lib/layout";
 import type { BookingLookup, LivePosition, PublicRide, RideBookingView, RiderReview } from "@/lib/rides";
 import { addDays, describeSchedule } from "@/lib/schedule";
+import type { VerifyMode } from "@/lib/verify";
 
 const PROFILE = "hamsafar:rider";
 const bookingKey = (slug: string) => `hamsafar:booking:${slug}`;
@@ -26,8 +28,9 @@ async function post<T>(url: string, body: unknown): Promise<T> {
 
 const dayWord = (d: string) => (d === todayLocal() ? "Today" : d === addDays(todayLocal(), 1) ? "Tomorrow" : formatDate(d));
 
-export function RideView({ slug, initial, start }: { slug: string; initial: PublicRide; start: { date?: string; p?: number; d?: number } }) {
+export function RideView({ slug, initial, start, verify = null }: { slug: string; initial: PublicRide; start: { date?: string; p?: number; d?: number }; verify?: VerifyMode }) {
   const [ride, setRide] = useState(initial);
+  const phoneCheck = usePhoneVerify(verify);
   const loc = useMyLocation();
   const [driver, setDriver] = useState<LivePosition | null>(null);
   const open = ride.runs.filter((r) => r.left > 0);
@@ -109,13 +112,15 @@ export function RideView({ slug, initial, start }: { slug: string; initial: Publ
   async function book(e: React.FormEvent) {
     e.preventDefault();
     if (!ready) return;
-    setBusy(true);
     setError(null);
+    const phoneToken = await phoneCheck.ensure(phone);
+    if (phoneToken === null) return setError("Verify your WhatsApp number to book.");
+    setBusy(true);
     try {
       localStorage.setItem(PROFILE, JSON.stringify({ name, phone, gender }));
     } catch {}
     try {
-      const r = await post<{ booking: RideBookingView }>(`/api/rides/${slug}/book`, { date, name, phone, gender, seats, pickupIdx: pickup, dropIdx: drop });
+      const r = await post<{ booking: RideBookingView }>(`/api/rides/${slug}/book`, { date, name, phone, gender, seats, pickupIdx: pickup, dropIdx: drop, phoneToken });
       try {
         localStorage.setItem(bookingKey(slug), JSON.stringify({ phone: r.booking.phone, code: r.booking.code }));
       } catch {}
@@ -263,7 +268,7 @@ export function RideView({ slug, initial, start }: { slug: string; initial: Publ
                 Phone (WhatsApp)
               </label>
               <input id="rphone" className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="0300 1234567" value={phone} onChange={(e) => setPhone(e.target.value)} />
-              {phone && !phoneOk && <p className="mt-1 text-xs text-red-600">Enter a valid phone number.</p>}
+              {phone && !phoneOk ? <p className="mt-1 text-xs text-red-600">Enter a valid phone number.</p> : <VerifiedHint mode={verify} phone={phone} />}
             </div>
           </div>
           <div className="grid grid-cols-[1fr_auto] gap-3">
@@ -298,6 +303,7 @@ export function RideView({ slug, initial, start }: { slug: string; initial: Publ
             {busy ? "Booking…" : `Book ${seats > 1 ? `${seats} seats` : "my seat"}${ride.fare !== null ? ` · ${formatFare(ride.fare * seats)}` : ""}`}
           </button>
           <p className="text-center text-xs text-slate-500">You get the driver&apos;s number after booking. Your number is shown only to the driver.</p>
+          {phoneCheck.dialog}
         </form>
       )}
 

@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, CircleAlert, Plus, Trash2 } from "lucide-react";
 import { MapView } from "@/components/carpool/MapView";
+import { usePhoneVerify, VerifiedHint } from "@/components/carpool/PhoneVerify";
 import { PlacePicker } from "@/components/carpool/PlacePicker";
 import { GenderIcon } from "@/components/SeatMap";
-import { todayLocal } from "@/lib/format";
+import { normalizePhone, todayLocal } from "@/lib/format";
 import type { Gender } from "@/lib/layout";
 import type { Point } from "@/lib/places";
 import { WEEKDAYS } from "@/lib/schedule";
+import type { VerifyMode } from "@/lib/verify";
 
 export type RideFormValues = {
   driverName: string;
@@ -68,14 +70,18 @@ export function RideForm({
   token,
   lockedRoute = false,
   onSaved,
+  verify = null,
 }: {
   initial?: RideFormValues;
   token?: string;
   lockedRoute?: boolean;
   /** Called after an edit is saved (before the page refreshes). */
   onSaved?: () => void;
+  /** How phone numbers are checked (null: they aren't). */
+  verify?: VerifyMode;
 }) {
   const router = useRouter();
+  const phoneCheck = usePhoneVerify(verify);
   const [v, setV] = useState<RideFormValues>(() => initial ?? emptyRide());
   // A returning driver's details, remembered on this phone.
   useEffect(() => {
@@ -97,9 +103,13 @@ export function RideForm({
     setError(null);
     if (v.points.some((p) => !p)) return setError("Choose every location of the route (or remove the empty stop).");
     if (!v.driverGender) return setError("Choose male or female.");
+    // New rides, and edits that change the number, need a verified WhatsApp number.
+    const phoneChanged = !initial || normalizePhone(initial.driverPhone) !== normalizePhone(v.driverPhone);
+    const phoneToken = phoneChanged ? await phoneCheck.ensure(v.driverPhone) : "";
+    if (phoneToken === null) return setError(normalizePhone(v.driverPhone) ? "Verify your WhatsApp number to publish." : "Enter a valid phone number, e.g. 0300 1234567");
     setBusy(true);
     try {
-      const body = { ...v, fare: v.fare.trim() === "" ? "" : Number(v.fare), until: v.until || "", points: route };
+      const body = { ...v, fare: v.fare.trim() === "" ? "" : Number(v.fare), until: v.until || "", points: route, phoneToken };
       const res = await fetch(token ? `/api/rides/manage/${token}` : "/api/rides", {
         method: token ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
@@ -311,6 +321,7 @@ export function RideForm({
               Phone (WhatsApp) <span className="font-normal text-slate-400">(shown only to riders who book)</span>
             </label>
             <input id="driverPhone" required type="tel" inputMode="tel" autoComplete="tel" className="input" value={v.driverPhone} onChange={(e) => set({ driverPhone: e.target.value })} placeholder="0300 1234567" />
+            <VerifiedHint mode={verify} phone={v.driverPhone} />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -339,6 +350,7 @@ export function RideForm({
         {busy ? "Saving…" : token ? "Save changes" : "Publish my ride"}
       </button>
       {!token && <p className="text-center text-xs text-slate-500">No account needed. You get a private link to manage your ride: keep it safe.</p>}
+      {phoneCheck.dialog}
     </form>
   );
 }

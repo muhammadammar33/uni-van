@@ -3,6 +3,10 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { RideForm } from "@/components/carpool/RideForm";
 import { Logo } from "@/components/Logo";
+import { verifyMode } from "@/lib/verify";
+
+// Reads the WhatsApp verification setting at request time.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Offer a ride", description: "Fill the empty seats in your car. No sign-up." };
 
@@ -22,7 +26,7 @@ export default function OfferPage() {
         <Link href="/" className="mb-3 inline-flex items-center gap-1 text-sm text-white/90 hover:text-white">
           <ArrowLeft className="size-4" /> Back
         </Link>
-        <RideForm />
+        <RideForm verify={verifyMode()} />
       </main>
     </div>
   );

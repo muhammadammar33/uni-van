@@ -291,6 +291,27 @@ export const feedback = pgTable(
   (t) => [index("feedback_created_idx").on(t.createdAt), index("feedback_ip_idx").on(t.ipHash)],
 );
 
+/**
+ * WhatsApp phone checks. "send": we message the person a code; they type it in. "message": they send us a
+ * WhatsApp containing the code, and the message coming from their number proves it's theirs.
+ */
+export const phoneVerifications = pgTable(
+  "phone_verifications",
+  {
+    /** Random id the browser keeps while it waits. */
+    id: text("id").primaryKey(),
+    phone: text("phone").notNull(),
+    method: text("method").$type<"send" | "message">().notNull(),
+    /** sha256 of the code (never stored in clear). */
+    codeHash: text("code_hash").notNull(),
+    attempts: integer("attempts").default(0).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    createdAt,
+  },
+  (t) => [index("phone_verifications_phone_idx").on(t.phone)],
+);
+
 /** Attempt counters for rate limits (sign-in, booking codes, ride creation). Keys never hold raw IP addresses. */
 export const rateLimits = pgTable("rate_limits", {
   key: text("key").primaryKey(),

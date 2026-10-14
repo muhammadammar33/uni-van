@@ -7,6 +7,7 @@ import { Logo } from "@/components/Logo";
 import { formatFare, formatTime } from "@/lib/format";
 import { publicRide } from "@/lib/rides";
 import { describeSchedule } from "@/lib/schedule";
+import { verifyMode } from "@/lib/verify";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +52,7 @@ export default async function RidePage({ params, searchParams }: PageProps<"/r/[
           </p>
         </div>
       </header>
-      <RideView slug={slug} initial={ride} start={{ date, p: num("p"), d: num("d") }} />
+      <RideView slug={slug} initial={ride} start={{ date, p: num("p"), d: num("d") }} verify={verifyMode()} />
     </div>
   );
 }

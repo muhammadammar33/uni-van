@@ -43,6 +43,13 @@
       "when": 1791959472329,
       "tag": "0005_rate_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791964489101,
+      "tag": "0006_phone_verifications",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ManageView } from "@/components/carpool/ManageView";
 import { Logo } from "@/components/Logo";
 import { manageRide } from "@/lib/rides";
+import { verifyMode } from "@/lib/verify";
 
 export const dynamic = "force-dynamic";
 // Private link: keep it out of search engines and away from referrers.
@@ -29,7 +30,7 @@ export default async function ManagePage({ params, searchParams }: PageProps<"/r
         </div>
       </header>
       <main className="mx-auto -mt-10 max-w-2xl px-4">
-        <ManageView token={token} data={data} isNew={sp.new !== undefined} saved={sp.saved !== undefined} />
+        <ManageView token={token} data={data} isNew={sp.new !== undefined} saved={sp.saved !== undefined} verify={verifyMode()} />
       </main>
     </div>
   );
