@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { blur, distanceKm, matchRoute, nearestIndex } from "./geo";
 import { decodePoint, encodePoint, findPlace, PLACES } from "./places";
-import { describeSchedule, nextRuns, runsOn } from "./schedule";
+import { describeSchedule, nextRuns, runOver, runsOn } from "./schedule";
 
 const p = (k: string) => findPlace(k)!;
 
@@ -52,4 +52,12 @@ test("schedules", () => {
 test("blurred positions move by at most ~250 m", () => {
   const x = { lat: 33.71234, lng: 73.05678 };
   assert.ok(distanceKm(x, blur(x)) < 0.25);
+});
+
+test("a ride counts as done an hour after it leaves (then riders can rate it)", () => {
+  assert.equal(runOver("2026-10-13", "07:30", "2026-10-14T06:00"), true, "yesterday");
+  assert.equal(runOver("2026-10-15", "07:30", "2026-10-14T23:00"), false, "tomorrow");
+  assert.equal(runOver("2026-10-14", "07:30", "2026-10-14T08:29"), false, "59 minutes after leaving");
+  assert.equal(runOver("2026-10-14", "07:30", "2026-10-14T08:30"), true, "an hour after leaving");
+  assert.equal(runOver("2026-10-14", "23:30", "2026-10-15T00:10"), true, "late ride, next day");
 });

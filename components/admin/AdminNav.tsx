@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Armchair, Building2, Bus, Car, UserCog, Users } from "lucide-react";
+import { Armchair, Building2, Bus, Car, MessageSquareHeart, UserCog, Users } from "lucide-react";
 
-const ICONS = { trips: Bus, vehicles: Armchair, riders: Users, team: UserCog, orgs: Building2, carpool: Car };
+const ICONS = { trips: Bus, vehicles: Armchair, riders: Users, team: UserCog, orgs: Building2, carpool: Car, feedback: MessageSquareHeart };
 export type NavItem = { href: string; label: string; icon: keyof typeof ICONS };
 
 const isOn = (href: string, path: string) =>

@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CircleCheckBig, Copy, MessageCircle, Navigation, Pause, Pencil, Phone, Play, Radio, Send, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { CircleCheckBig, Copy, MessageCircle, MessageSquareHeart, Navigation, Pause, Pencil, Phone, Play, Radio, Send, Star, Trash2, X } from "lucide-react";
 import { CopyButton } from "@/components/admin/CopyButton";
 import { MapView } from "@/components/carpool/MapView";
 import { rememberRide, RideForm, type RideFormValues } from "@/components/carpool/RideForm";
 import { deviceId, useMyLocation } from "@/components/carpool/useMyLocation";
+import { Stars } from "@/components/carpool/Stars";
 import { GenderIcon } from "@/components/SeatMap";
 import { displayPhone, formatDate, formatFare, formatTime, todayLocal } from "@/lib/format";
 import type { ManageData } from "@/lib/rides";
@@ -264,6 +266,48 @@ export function ManageView({ token, data, isNew, saved }: { token: string; data:
           })}
         </div>
       </section>
+
+      <section className="card space-y-3">
+        <h2 className="flex items-center gap-2 font-bold">
+          <Star className="size-5 text-amber-500" /> Your rating
+        </h2>
+        {data.rating ? (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Stars value={data.rating.avg} className="size-5" />
+              <span className="text-xl font-extrabold">{data.rating.avg.toFixed(1)}</span>
+              <span className="text-sm text-slate-500">
+                from {data.rating.count} rider{data.rating.count === 1 ? "" : "s"} · shown on all your rides
+              </span>
+            </div>
+            <ul className="divide-y divide-slate-100 text-sm">
+              {data.reviews.map((r, i) => (
+                <li key={i} className="py-2">
+                  <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <Stars value={r.stars} className="size-3" /> {r.name} · {formatDate(r.date)}
+                  </span>
+                  {r.comment ? <span className="text-slate-700 [overflow-wrap:anywhere]">{r.comment}</span> : <span className="text-slate-400">No comment</span>}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="text-sm text-slate-600">No ratings yet. After each ride, your riders can rate you from 1 to 5 stars. A good rating brings you more riders.</p>
+        )}
+      </section>
+
+      <Link
+        href={`/feedback?role=driver&ride=${ride.slug}&from=/r/${ride.slug}`}
+        className="card flex items-center gap-3 !p-4 transition hover:shadow-lift"
+      >
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-lt text-brand">
+          <MessageSquareHeart className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-bold">Help us improve Hamsafar</span>
+          <span className="block text-sm text-slate-500">Ideas, problems, or a rider who caused trouble: tell the Hamsafar team.</span>
+        </span>
+      </Link>
 
       {!isNew && (
         <p className="flex items-center justify-center gap-1.5 text-center text-xs text-slate-500">

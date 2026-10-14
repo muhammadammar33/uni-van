@@ -19,6 +19,7 @@ export function OgFrame({ eyebrow, title, children }: { eyebrow: string; title: 
       <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
         <div style={{ width: 64, height: 64, borderRadius: 18, background: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40 }}>🚐</div>
         <div style={{ fontSize: 34, fontWeight: 800 }}>{BRAND.name}</div>
+        <div style={{ marginLeft: "auto", fontSize: 28, fontWeight: 600, color: "#99f6e4" }}>{BRAND.domain}</div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
         <div style={{ fontSize: 30, fontWeight: 700, color: "#fcd34d", textTransform: "uppercase", letterSpacing: 2 }}>{eyebrow}</div>

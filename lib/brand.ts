@@ -2,6 +2,8 @@
 export const BRAND = {
   name: process.env.NEXT_PUBLIC_PLATFORM_NAME || "Hamsafar",
   tagline: process.env.NEXT_PUBLIC_PLATFORM_TAGLINE || "Carpooling from Wah Cantt to Rawat.",
+  /** The site's own domain, shown in footers and link previews. */
+  domain: process.env.NEXT_PUBLIC_SITE_DOMAIN || "hamsafar.website",
   /** WhatsApp number for "Contact us", digits with country code (e.g. 923001234567). Optional. */
   whatsapp: (process.env.NEXT_PUBLIC_CONTACT_WHATSAPP || "").replace(/\D/g, ""),
 };

@@ -11,7 +11,7 @@ export default function Image() {
       <OgFrame eyebrow="Carpool · Wah Cantt to Rawat" title="Share the ride. Split the fuel.">
         <div style={{ display: "flex", gap: 16 }}>
           <OgPill>Islamabad · Rawalpindi</OgPill>
-          <OgPill>Women-only rides</OgPill>
+          <OgPill>Rated drivers</OgPill>
           <OgPill accent>No sign-up</OgPill>
         </div>
       </OgFrame>

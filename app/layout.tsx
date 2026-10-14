@@ -1,13 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { BRAND } from "@/lib/brand";
+import { canonicalUrl } from "@/lib/url";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakarta", display: "swap" });
 
 export const metadata: Metadata = {
-  metadataBase: process.env.SITE_URL ? new URL(process.env.SITE_URL) : undefined,
-  title: { default: `${BRAND.name}: book your van seat`, template: `%s · ${BRAND.name}` },
+  metadataBase: new URL(canonicalUrl()),
+  title: { default: `${BRAND.name}: carpool from Wah Cantt to Rawat`, template: `%s · ${BRAND.name}` },
   description: BRAND.tagline,
   applicationName: BRAND.name,
   openGraph: { siteName: BRAND.name, type: "website" },

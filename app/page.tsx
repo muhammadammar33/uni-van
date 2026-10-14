@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Car, Check, MapPinned, MessageCircle, Route, ShieldCheck, Users } from "lucide-react";
+import { ArrowRight, Car, Check, MapPinned, MessageCircle, MessageSquareHeart, Route, ShieldCheck, Star, Users } from "lucide-react";
 import { LiveMap } from "@/components/carpool/LiveMap";
 import { LocationPrompt } from "@/components/carpool/LocationPrompt";
 import { MyRides } from "@/components/carpool/MyRides";
@@ -57,7 +57,7 @@ export default async function Home() {
               Find a seat in a car already going your way, or fill the empty seats in yours. Daily office and university commutes, or a one-off trip. No sign-up.
             </p>
             <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-teal-50/90">
-              {["Pickup anywhere on the route", "Women-only rides", "Live driver location"].map((t) => (
+              {["Pickup anywhere on the route", "Women-only rides", "Rated drivers", "Live driver location"].map((t) => (
                 <li key={t} className="flex items-center gap-1.5">
                   <Check className="size-4 text-accent" /> {t}
                 </li>
@@ -125,6 +125,7 @@ export default async function Home() {
               <li>1. Choose your pickup and drop-off (from the list, your location, or a pin on the map).</li>
               <li>2. See every car passing near both, in the right direction.</li>
               <li>3. Book your seat: you get the driver&apos;s WhatsApp and can watch the car arrive.</li>
+              <li>4. After the ride, rate your driver so others know who to ride with.</li>
             </ol>
           </div>
           <div className="card">
@@ -139,9 +140,10 @@ export default async function Home() {
           </div>
         </section>
 
-        <section className="grid gap-4 sm:grid-cols-3">
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             [ShieldCheck, "Women-only rides", "Drivers can take only women (or only men). Riders' phone numbers are shown only to their driver."],
+            [Star, "Rated drivers", "Riders rate every driver after the ride. See a driver's stars and reviews before you book."],
             [MessageCircle, "WhatsApp, not calls", "Once booked, message the driver in one tap with your booking already written."],
             [MapPinned, "Any point on the way", "Not on the list? Drop a pin. Rides within about 3 km of your pickup and drop-off show up."],
           ].map(([Icon, t, d]) => {
@@ -155,12 +157,29 @@ export default async function Home() {
             );
           })}
         </section>
+        <section className="flex flex-col items-start gap-4 rounded-3xl bg-brand-lt/60 p-6 sm:flex-row sm:items-center sm:p-8">
+          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white text-brand shadow-sm">
+            <MessageSquareHeart className="size-6" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xl font-extrabold tracking-tight">Help us make {BRAND.name} better</h2>
+            <p className="text-slate-600">Riding or driving, tell us what to improve, what went wrong, or a place missing from the list. We read every message.</p>
+          </div>
+          <Link href="/feedback?from=/" className="btn-primary shrink-0">
+            Send feedback
+          </Link>
+        </section>
       </div>
 
       <footer className="border-t border-slate-100 py-8">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 text-sm text-slate-500 sm:px-6">
           <Logo />
-          <span>Carpooling from Wah Cantt to Rawat.</span>
+          <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span>Carpooling from Wah Cantt to Rawat · {BRAND.domain}</span>
+            <Link href="/feedback?from=/" className="font-semibold text-brand hover:underline">
+              Feedback
+            </Link>
+          </span>
         </div>
       </footer>
       <LocationPrompt />

@@ -1,14 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Car, CircleAlert, CircleCheckBig, Clock, MessageCircle, Phone, Radio, Share2, Users, X } from "lucide-react";
+import Link from "next/link";
+import { Car, CircleAlert, CircleCheckBig, Clock, MessageCircle, MessageSquareWarning, Phone, Radio, Share2, Star, Users, X } from "lucide-react";
 import { MapView, type MapMarker } from "@/components/carpool/MapView";
+import { RateDriver } from "@/components/carpool/RateDriver";
+import { RatingBadge, Stars } from "@/components/carpool/Stars";
 import { useMyLocation } from "@/components/carpool/useMyLocation";
 import { GenderIcon } from "@/components/SeatMap";
 import { displayPhone, formatDate, formatFare, formatTime, normalizePhone, todayLocal } from "@/lib/format";
 import { distanceKm, formatKm, nearestIndex } from "@/lib/geo";
 import type { Gender } from "@/lib/layout";
-import type { LivePosition, PublicRide, RideBookingView } from "@/lib/rides";
+import type { BookingLookup, LivePosition, PublicRide, RideBookingView, RiderReview } from "@/lib/rides";
 import { addDays, describeSchedule } from "@/lib/schedule";
 
 const PROFILE = "hamsafar:rider";
@@ -39,6 +42,12 @@ export function RideView({ slug, initial, start }: { slug: string; initial: Publ
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [booking, setBooking] = useState<RideBookingView | null>(null);
+  /** A booking whose ride is done: the rider can rate the driver. */
+  const [past, setPast] = useState<{ booking: RideBookingView; review: RiderReview | null } | null>(null);
+  const showFound = useCallback((r: BookingLookup) => {
+    if (r.state === "upcoming") setBooking(r.booking);
+    else setPast({ booking: r.booking, review: r.review });
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -67,8 +76,8 @@ export function RideView({ slug, initial, start }: { slug: string; initial: Publ
       }
       const mine = JSON.parse(localStorage.getItem(bookingKey(slug)) ?? "null");
       if (mine)
-        post<{ booking: RideBookingView }>(`/api/rides/${slug}/lookup`, mine)
-          .then((r) => setBooking(r.booking))
+        post<BookingLookup>(`/api/rides/${slug}/lookup`, mine)
+          .then(showFound)
           .catch(() => localStorage.removeItem(bookingKey(slug)));
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once on load
@@ -185,6 +194,8 @@ export function RideView({ slug, initial, start }: { slug: string; initial: Publ
         </div>
       )}
 
+      {past && <RateDriver slug={slug} booking={past.booking} review={past.review} onSaved={(review) => { setPast({ ...past, review }); refresh(); }} />}
+
       {booking ? (
         <Ticket booking={booking} onCancel={cancel} busy={busy} />
       ) : ride.status !== "active" ? (
@@ -291,9 +302,10 @@ export function RideView({ slug, initial, start }: { slug: string; initial: Publ
       )}
 
       <section className="card space-y-2 text-sm">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <GenderIcon gender={ride.driverGender} className={`size-4 ${ride.driverGender === "female" ? "text-female" : "text-male"}`} />
           <b>{ride.driverName}</b> <span className="text-slate-500">is driving</span>
+          <RatingBadge rating={ride.rating} className="ml-auto" />
         </div>
         <div className="flex items-center gap-2 text-slate-600">
           <Car className="size-4" /> {ride.car}
@@ -305,6 +317,8 @@ export function RideView({ slug, initial, start }: { slug: string; initial: Publ
           <Users className="size-4" /> {ride.seats} seats for riders{ride.riders !== "anyone" ? ` · ${ride.riders === "female" ? "women" : "men"} only` : ""}
         </div>
         {ride.notes && <p className="whitespace-pre-line rounded-xl bg-amber-50 p-3 text-amber-900">{ride.notes}</p>}
+        <Reviews ride={ride} />
+        {!past && !booking && <RateLookup slug={slug} driver={ride.driverName} onFound={showFound} />}
         <button
           type="button"
           className="btn-ghost mt-2 w-full"
@@ -317,6 +331,11 @@ export function RideView({ slug, initial, start }: { slug: string; initial: Publ
           <Share2 className="size-4" /> Share this ride
         </button>
       </section>
+      <p className="text-center text-sm text-slate-500">
+        <Link href={`/feedback?ride=${slug}&from=/r/${slug}`} className="inline-flex items-center gap-1.5 font-semibold hover:text-ink">
+          <MessageSquareWarning className="size-4" /> Problem with this ride? Tell the Hamsafar team
+        </Link>
+      </p>
     </main>
   );
 }
@@ -376,5 +395,84 @@ function Ticket({ booking, onCancel, busy }: { booking: RideBookingView; onCance
         </button>
       </div>
     </section>
+  );
+}
+
+/** What riders said about this driver. */
+function Reviews({ ride }: { ride: PublicRide }) {
+  if (!ride.rating) return null;
+  const said = (ride.reviews ?? []).filter((r) => r.comment);
+  return (
+    <div className="rounded-xl border border-slate-200/80 p-3">
+      <div className="flex items-center gap-2">
+        <Stars value={ride.rating.avg} />
+        <b>{ride.rating.avg.toFixed(1)}</b>
+        <span className="text-slate-500">
+          from {ride.rating.count} rider{ride.rating.count === 1 ? "" : "s"}
+        </span>
+      </div>
+      {said.length > 0 && (
+        <ul className="mt-2 space-y-2">
+          {said.slice(0, 4).map((r, i) => (
+            <li key={i} className="text-slate-600">
+              <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                <Stars value={r.stars} className="size-3" /> {r.name} · {formatDate(r.date)}
+              </span>
+              <span className="[overflow-wrap:anywhere]">{r.comment}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Rate a past ride from another phone or browser, with the phone number and booking code. */
+function RateLookup({ slug, driver, onFound }: { slug: string; driver: string; onFound: (r: BookingLookup) => void }) {
+  const [open, setOpen] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (!open)
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="flex items-center gap-1.5 font-semibold text-brand hover:underline">
+        <Star className="size-4" /> Travelled with {driver}? Rate the ride
+      </button>
+    );
+  return (
+    <form
+      className="space-y-2 rounded-xl bg-slate-50 p-3"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError(null);
+        try {
+          const r = await post<BookingLookup>(`/api/rides/${slug}/lookup`, { phone, code });
+          if (r.state === "upcoming") setError("That ride hasn't happened yet. You can rate it an hour after it leaves.");
+          else {
+            try {
+              localStorage.setItem(bookingKey(slug), JSON.stringify({ phone: r.booking.phone, code: r.booking.code }));
+            } catch {}
+            onFound(r);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }
+        } catch (err) {
+          setError((err as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <p className="font-semibold">Enter the phone number and code from your booking</p>
+      <div className="grid grid-cols-[1fr_7rem] gap-2">
+        <input className="input" type="tel" inputMode="tel" placeholder="0300 1234567" aria-label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        <input className="input uppercase" placeholder="Code" aria-label="Booking code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+      </div>
+      {error && <p className="text-sm text-red-700">{error}</p>}
+      <button className="btn-primary w-full" disabled={busy || !phone || code.length < 4}>
+        {busy ? "Finding your ride…" : "Rate my ride"}
+      </button>
+    </form>
   );
 }

@@ -1,5 +1,7 @@
 # Hamsafar
 
+Live at **[hamsafar.website](https://hamsafar.website)**.
+
 **Right now Hamsafar is a carpool site for the Wah Cantt – Islamabad – Rawalpindi – Rawat corridor.** Drivers offer the empty seats in their car without signing up; riders search by pickup and drop-off and book a seat. The organisations platform described further down (vans, universities, tours, companies) is still in the code and still works, but it's hidden from the home page for now.
 
 ## Carpool
@@ -18,6 +20,19 @@
 3. The ride page (`/r/<slug>`) shows the route on a map and the driver's live position. Book with name, phone and gender. The booking shows the driver's number with one-tap WhatsApp (message already written) and call. A seat can be cancelled from the same browser or with phone + booking code.
 4. Rules: no double booking (locked transaction), one booking per phone per day, women-only / men-only rides enforced, seats can't be cut below what's already booked, and the route is locked once riders have booked.
 
+### Driver ratings
+
+- An hour after a ride leaves, the rider's booking turns into **"How was your ride with …?"**: 1 to 5 stars and an optional comment. From another phone, "Travelled with …? Rate the ride" asks for the phone number and booking code.
+- Only riders who really travelled can rate (the booking's phone + code, after the ride). One rating per rider per driver; rating again replaces it.
+- Ratings belong to the driver's phone number, so they follow the driver across all their rides. Ride cards show "★ 4.8 (12)" (or "New driver"); the ride page shows the latest comments with the rider's first name only; the driver sees all of them on their private page.
+- Super admins can hide an abusive or fake review (**Admin → Feedback → Driver reviews**); hidden reviews don't count.
+
+### Feedback to the Hamsafar team
+
+- `/feedback`: idea, problem, safety concern or praise, from a rider, driver or anyone, with an optional name and phone/email for a reply. Linked from the home page, every ride page ("Problem with this ride?"), the driver's page and after a rating. Safety reports show the emergency numbers (15 Police, 1122 Rescue) first.
+- Messages arrive in **Admin → Feedback** (super admins): new unhandled safety reports first, each with who sent it, how to reply and the ride it's about; mark handled or delete.
+- Spam protection: a hidden field bots fill in, and at most 5 messages per hour from one sender.
+
 ### Location and privacy
 
 - The site asks once for location access, with an explanation. It's used to suggest the nearest places and to centre the map.
@@ -32,9 +47,11 @@
 | `/search?from=&to=&date=` | Matching rides on a map |
 | `/offer` | Offer a ride |
 | `/r/<slug>` | Public ride page and booking (the link to share) |
-| `/r/manage/<token>` | Driver's private page |
+| `/r/manage/<token>` | Driver's private page, with their rating |
+| `/feedback` | Send feedback to the Hamsafar team |
 | `/admin/rides` | Super admin: all carpool rides |
-| `GET/POST /api/rides`, `/api/rides/<slug>[/book\|/lookup\|/cancel]`, `/api/rides/manage/<token>`, `/api/live` | JSON API used by the pages |
+| `/admin/feedback` | Super admin: feedback messages and driver reviews |
+| `GET/POST /api/rides`, `/api/rides/<slug>[/book\|/lookup\|/cancel\|/review]`, `/api/rides/manage/<token>`, `/api/live`, `POST /api/feedback` | JSON API used by the pages |
 
 The places list is in `lib/places.ts`, route matching in `lib/geo.ts` and schedules in `lib/schedule.ts` (`npm test` covers them). The maps are OpenStreetMap tiles drawn with Leaflet, and place names for dropped pins come from Nominatim. Neither needs an API key.
 
@@ -99,6 +116,12 @@ Two people tapping the same seat at once: only the first gets it (bookings run i
 1. Import this repository in Vercel; add **Neon Postgres** under Storage (sets `DATABASE_URL`).
 2. Environment variables (see `.env.example`): `AUTH_SECRET` (32+ random characters), `ADMIN_EMAIL` and `ADMIN_PASSWORD` (the first super admin), optional `SITE_URL`, `NEXT_PUBLIC_CONTACT_WHATSAPP`, `NEXT_PUBLIC_PLATFORM_NAME` (default "Hamsafar"), `NEXT_PUBLIC_TIMEZONE` (default Asia/Karachi).
 3. Each deploy runs `scripts/db-setup.ts`: migrations, default vehicles, first super admin.
+
+### Domain (hamsafar.website)
+
+1. Vercel → the project → **Settings → Domains** → add `hamsafar.website` (and `www.hamsafar.website`, redirecting to it).
+2. At the registrar (Hostinger → Domains → hamsafar.website → **DNS / Nameservers**), remove the parking `A` / `CNAME` records and add the records Vercel shows, usually `A  @  76.76.21.21` and `CNAME  www  cname.vercel-dns.com`.
+3. Once Vercel shows **Valid Configuration**, set `SITE_URL=https://hamsafar.website` and redeploy. From then on, visits to the old `*.vercel.app` address are sent to hamsafar.website (`proxy.ts`), and link previews, `robots.txt` and `sitemap.xml` use the domain.
 
 **Upgrading from the single-operator version:** the migration creates one organisation holding all existing trips, vehicles and bookings, and makes every existing admin a super admin. If `NEXT_PUBLIC_BRAND_NAME` was set, that becomes the organisation's name. Sign in, open the organisation under **Organisations**, and add its own admin under **Team**.
 

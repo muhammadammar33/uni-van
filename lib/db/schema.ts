@@ -244,6 +244,55 @@ export const livePositions = pgTable(
   (t) => [index("live_positions_updated_idx").on(t.updatedAt)],
 );
 
+/**
+ * A rider's rating of a driver after travelling with them. Drivers have no account, so ratings belong to the
+ * driver's phone number and follow them across all their rides. One review per rider per driver (updated if
+ * they rate again).
+ */
+export const driverReviews = pgTable(
+  "driver_reviews",
+  {
+    id: serial("id").primaryKey(),
+    driverPhone: text("driver_phone").notNull(),
+    riderPhone: text("rider_phone").notNull(),
+    /** First name only: that's what is shown. */
+    riderName: text("rider_name").notNull(),
+    rideId: integer("ride_id").references(() => rides.id, { onDelete: "set null" }),
+    /** 1 to 5. */
+    stars: integer("stars").notNull(),
+    comment: text("comment"),
+    /** Hidden by a super admin (abusive, fake...). */
+    hidden: boolean("hidden").default(false).notNull(),
+    createdAt,
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("driver_reviews_driver_rider_uq").on(t.driverPhone, t.riderPhone), index("driver_reviews_driver_idx").on(t.driverPhone)],
+);
+
+/** Messages from riders and drivers to the Hamsafar team: ideas, problems, safety reports. */
+export const feedback = pgTable(
+  "feedback",
+  {
+    id: serial("id").primaryKey(),
+    kind: text("kind").$type<"idea" | "problem" | "safety" | "praise">().notNull(),
+    role: text("role").$type<"rider" | "driver" | "other">().notNull(),
+    message: text("message").notNull(),
+    name: text("name"),
+    /** Phone or email, if they want a reply. */
+    contact: text("contact"),
+    /** Page they wrote from, and the ride it was about, if any. */
+    page: text("page"),
+    rideSlug: text("ride_slug"),
+    /** Hash of the sender's IP, only to limit how many messages one sender can post. */
+    ipHash: text("ip_hash"),
+    status: text("status").$type<"new" | "done">().default("new").notNull(),
+    createdAt,
+  },
+  (t) => [index("feedback_created_idx").on(t.createdAt), index("feedback_ip_idx").on(t.ipHash)],
+);
+
 export type Ride = typeof rides.$inferSelect;
 export type RidePoint = typeof ridePoints.$inferSelect;
 export type RideBooking = typeof rideBookings.$inferSelect;
+export type DriverReview = typeof driverReviews.$inferSelect;
+export type Feedback = typeof feedback.$inferSelect;

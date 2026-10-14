@@ -1,13 +1,13 @@
 import "server-only";
 import { randomBytes, randomInt } from "node:crypto";
-import { and, asc, eq, gte, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireDb, schema as s } from "@/lib/db";
 import { normalizePhone, nowLocal, todayLocal } from "@/lib/format";
 import { blur, distanceKm, matchRoute, type LatLng } from "@/lib/geo";
 import { GENDERS } from "@/lib/layout";
 import { BookingError } from "@/lib/trips";
-import { nextRuns, runsOn, type Schedule } from "@/lib/schedule";
+import { nextRuns, runOver, runsOn, type Schedule } from "@/lib/schedule";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const newCode = () => Array.from({ length: 4 }, () => CODE_CHARS[randomInt(CODE_CHARS.length)]).join("");
@@ -161,9 +161,16 @@ export type PublicRide = {
   points: { name: string; lat: number; lng: number }[];
   /** Upcoming run dates with seats left on each. */
   runs: { date: string; left: number }[];
+  /** The driver's rating from riders who travelled with them (on any of their rides); null when none yet. */
+  rating: DriverRating | null;
+  /** Latest reviews, on the ride page only. */
+  reviews?: PublicReview[];
 };
 
-function toPublic(r: s.Ride, points: s.RidePoint[], taken: Map<string, number>, runs: string[]): PublicRide {
+export type DriverRating = { avg: number; count: number };
+export type PublicReview = { name: string; stars: number; comment: string | null; date: string };
+
+function toPublic(r: s.Ride, points: s.RidePoint[], taken: Map<string, number>, runs: string[], ratings: Map<string, DriverRating>): PublicRide {
   return {
     slug: r.slug,
     driverName: r.driverName.split(" ")[0],
@@ -178,7 +185,29 @@ function toPublic(r: s.Ride, points: s.RidePoint[], taken: Map<string, number>, 
     status: r.status,
     points: points.map((p) => ({ name: p.name, lat: p.lat, lng: p.lng })),
     runs: runs.map((date) => ({ date, left: Math.max(0, r.seats - (taken.get(`${r.id}:${date}`) ?? 0)) })),
+    rating: ratings.get(r.driverPhone) ?? null,
   };
+}
+
+/** Average stars per driver phone, leaving out reviews hidden by an admin. */
+async function ratingsFor(phones: string[]) {
+  if (!phones.length) return new Map<string, DriverRating>();
+  const rows = await requireDb()
+    .select({ phone: s.driverReviews.driverPhone, avg: sql<number>`avg(${s.driverReviews.stars})::float`, count: sql<number>`count(*)::int` })
+    .from(s.driverReviews)
+    .where(and(inArray(s.driverReviews.driverPhone, [...new Set(phones)]), eq(s.driverReviews.hidden, false)))
+    .groupBy(s.driverReviews.driverPhone);
+  return new Map(rows.map((r) => [r.phone, { avg: Math.round(r.avg * 10) / 10, count: r.count }]));
+}
+
+async function reviewsFor(phone: string, limit = 6): Promise<PublicReview[]> {
+  const rows = await requireDb()
+    .select()
+    .from(s.driverReviews)
+    .where(and(eq(s.driverReviews.driverPhone, phone), eq(s.driverReviews.hidden, false)))
+    .orderBy(desc(s.driverReviews.updatedAt))
+    .limit(limit);
+  return rows.map((r) => ({ name: r.riderName, stars: r.stars, comment: r.comment, date: r.updatedAt.toISOString().slice(0, 10) }));
 }
 
 async function pointsFor(rideIds: number[]) {
@@ -190,8 +219,8 @@ export async function publicRide(slug: string) {
   const [r] = await requireDb().select().from(s.rides).where(eq(s.rides.slug, slug)).limit(1);
   if (!r) return null;
   const runs = r.status === "active" ? upcomingRuns(r, 14) : [];
-  const [points, taken] = await Promise.all([pointsFor([r.id]), seatsTaken([r.id], runs)]);
-  return toPublic(r, points, taken, runs);
+  const [points, taken, ratings, reviews] = await Promise.all([pointsFor([r.id]), seatsTaken([r.id], runs), ratingsFor([r.driverPhone]), reviewsFor(r.driverPhone)]);
+  return { ...toPublic(r, points, taken, runs, ratings), reviews };
 }
 
 export type SearchResult = PublicRide & { pickupKm: number; dropKm: number; pickupIdx: number; dropIdx: number };
@@ -224,10 +253,13 @@ export async function searchRides(from: LatLng | null, to: LatLng | null, date: 
     if (!runs.length) continue;
     out.push({ ride: r, pts, match, runs });
   }
-  const taken = await seatsTaken(
-    out.map((o) => o.ride.id),
-    [...new Set(out.flatMap((o) => o.runs))],
-  );
+  const [taken, ratings] = await Promise.all([
+    seatsTaken(
+      out.map((o) => o.ride.id),
+      [...new Set(out.flatMap((o) => o.runs))],
+    ),
+    ratingsFor(out.map((o) => o.ride.driverPhone)),
+  ]);
   const nearest = (pts: s.RidePoint[], p: LatLng | null, fallback: number) => {
     if (!p) return fallback;
     let best = fallback;
@@ -242,7 +274,7 @@ export async function searchRides(from: LatLng | null, to: LatLng | null, date: 
       let dropIdx = nearest(pts, to, pts.length - 1);
       if (dropIdx <= pickupIdx) dropIdx = Math.min(pts.length - 1, pickupIdx + 1);
       if (pickupIdx >= dropIdx) pickupIdx = Math.max(0, dropIdx - 1);
-      return { ...toPublic(ride, pts, taken, runs), pickupKm: match?.pickupKm ?? 0, dropKm: match?.dropKm ?? 0, pickupIdx, dropIdx };
+      return { ...toPublic(ride, pts, taken, runs, ratings), pickupKm: match?.pickupKm ?? 0, dropKm: match?.dropKm ?? 0, pickupIdx, dropIdx };
     })
     .filter((r) => r.runs.some((x) => x.left > 0))
     .sort((a, b) => a.runs[0].date.localeCompare(b.runs[0].date) || a.departTime.localeCompare(b.departTime) || a.pickupKm + a.dropKm - (b.pickupKm + b.dropKm));
@@ -326,29 +358,82 @@ export async function bookRide(slug: string, raw: unknown): Promise<RideBookingV
   });
 }
 
-async function findBooking(slug: string, phoneRaw: string, code: string) {
+/** A rider's bookings on a ride with this phone and code: the next one still to travel, and the latest done. */
+async function findBookings(slug: string, phoneRaw: string, code: string) {
   const phone = normalizePhone(phoneRaw);
   if (!phone || !code) return null;
-  const [row] = await requireDb()
+  const rows = await requireDb()
     .select({ ride: s.rides, booking: s.rideBookings })
     .from(s.rideBookings)
     .innerJoin(s.rides, eq(s.rides.id, s.rideBookings.rideId))
-    .where(and(eq(s.rides.slug, slug), eq(s.rideBookings.phone, phone), eq(s.rideBookings.code, code.trim().toUpperCase()), gte(s.rideBookings.date, todayLocal())))
-    .orderBy(asc(s.rideBookings.date))
-    .limit(1);
-  if (!row) return null;
-  return { ...row, pts: await pointsFor([row.ride.id]) };
+    .where(and(eq(s.rides.slug, slug), eq(s.rideBookings.phone, phone), eq(s.rideBookings.code, code.trim().toUpperCase())))
+    .orderBy(asc(s.rideBookings.date));
+  if (!rows.length) return null;
+  const ride = rows[0].ride;
+  const now = nowLocal();
+  const over = (b: s.RideBooking) => runOver(b.date, ride.departTime, now);
+  return {
+    ride,
+    upcoming: rows.find((r) => !over(r.booking))?.booking ?? null,
+    past: rows.findLast((r) => over(r.booking))?.booking ?? null,
+    pts: await pointsFor([ride.id]),
+  };
 }
 
+export type RiderReview = { stars: number; comment: string | null };
+
+/** The rider's booking: the upcoming one to show as a ticket, otherwise the last one done (to rate the driver). */
 export async function lookupRideBooking(slug: string, phone: string, code: string) {
-  const f = await findBooking(slug, phone, code);
-  return f ? bookingView(f.ride, f.pts, f.booking) : null;
+  const f = await findBookings(slug, phone, code);
+  if (!f) return null;
+  if (f.upcoming) return { booking: bookingView(f.ride, f.pts, f.upcoming), state: "upcoming" as const, review: null };
+  if (!f.past) return null;
+  const [mine] = await requireDb()
+    .select({ stars: s.driverReviews.stars, comment: s.driverReviews.comment })
+    .from(s.driverReviews)
+    .where(and(eq(s.driverReviews.driverPhone, f.ride.driverPhone), eq(s.driverReviews.riderPhone, f.past.phone)));
+  return { booking: bookingView(f.ride, f.pts, f.past), state: "past" as const, review: (mine as RiderReview | undefined) ?? null };
 }
+
+export type BookingLookup = NonNullable<Awaited<ReturnType<typeof lookupRideBooking>>>;
 
 export async function cancelRideBooking(slug: string, phone: string, code: string) {
-  const f = await findBooking(slug, phone, code);
+  const f = await findBookings(slug, phone, code);
+  if (!f?.upcoming) throw new BookingError("No upcoming booking found for that phone number and code.", 404);
+  await requireDb().delete(s.rideBookings).where(eq(s.rideBookings.id, f.upcoming.id));
+}
+
+/* ---------- Driver reviews ---------- */
+
+export const reviewInput = z.object({
+  phone: z.string().trim().max(30),
+  code: z.string().trim().max(8),
+  stars: z.coerce.number().int().min(1, "Choose 1 to 5 stars").max(5, "Choose 1 to 5 stars"),
+  comment: z.string().trim().max(500, "Keep it under 500 characters").optional().default(""),
+});
+
+/** A rider rates the driver after travelling: one review per rider per driver, replaced if they rate again. */
+export async function reviewDriver(slug: string, raw: unknown) {
+  const parsed = reviewInput.safeParse(raw);
+  if (!parsed.success) throw new BookingError(parsed.error.issues[0]?.message ?? "Check your rating");
+  const { phone, code, stars, comment } = parsed.data;
+  const f = await findBookings(slug, phone, code);
   if (!f) throw new BookingError("No booking found for that phone number and code.", 404);
-  await requireDb().delete(s.rideBookings).where(eq(s.rideBookings.id, f.booking.id));
+  if (!f.past) throw new BookingError("You can rate the driver once your ride is done.", 409);
+  const values = {
+    driverPhone: f.ride.driverPhone,
+    riderPhone: f.past.phone,
+    riderName: f.past.name.trim().split(/\s+/)[0],
+    rideId: f.ride.id,
+    stars,
+    comment: comment || null,
+    updatedAt: new Date(),
+  };
+  await requireDb()
+    .insert(s.driverReviews)
+    .values(values)
+    .onConflictDoUpdate({ target: [s.driverReviews.driverPhone, s.driverReviews.riderPhone], set: values });
+  return { stars, comment: values.comment };
 }
 
 /* ---------- Driver's page ---------- */
@@ -367,8 +452,11 @@ export async function manageRide(token: string) {
       .orderBy(asc(s.rideBookings.date), asc(s.rideBookings.pickupIdx)),
   ]);
   const runs = r.status === "active" ? upcomingRuns(r, 14) : [];
+  const [ratings, reviews] = await Promise.all([ratingsFor([r.driverPhone]), reviewsFor(r.driverPhone, 20)]);
   return {
     ride: r,
+    rating: ratings.get(r.driverPhone) ?? null,
+    reviews,
     points: pts.map((p) => ({ name: p.name, lat: p.lat, lng: p.lng, key: p.placeKey ?? undefined })),
     runs,
     bookings: bookings.map((b) => ({

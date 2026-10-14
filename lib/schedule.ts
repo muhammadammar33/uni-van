@@ -44,3 +44,11 @@ export function describeSchedule(s: Schedule): string {
     key === "1,2,3,4,5" ? "Mon – Fri" : key === "1,2,3,4,5,6" ? "Mon – Sat" : key === "0,6" || key === "6,0" ? "Weekends" : days.map((d) => WEEKDAYS[d]).join(", ");
   return `${label}${until}`;
 }
+
+/** A run counts as done an hour after it leaves: from then on riders can rate the driver, and can no longer cancel. */
+export function runOver(date: string, departTime: string, now: string) {
+  const today = now.slice(0, 10);
+  if (date !== today) return date < today;
+  const mins = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+  return mins(now.slice(11)) >= mins(departTime) + 60;
+}
