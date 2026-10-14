@@ -1,4 +1,7 @@
 import { BRAND } from "@/lib/brand";
+import { markSvg } from "@/lib/logoMark";
+
+const MARK_URI = `data:image/svg+xml;base64,${Buffer.from(markSvg()).toString("base64")}`;
 
 /** Shared 1200x630 frame for link preview images (rendered by next/og, so inline styles only). */
 export function OgFrame({ eyebrow, title, children }: { eyebrow: string; title: string; children?: React.ReactNode }) {
@@ -17,7 +20,8 @@ export function OgFrame({ eyebrow, title, children }: { eyebrow: string; title: 
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-        <div style={{ width: 64, height: 64, borderRadius: 18, background: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40 }}>🚐</div>
+        {/* eslint-disable-next-line @next/next/no-img-element -- next/og renders plain <img> */}
+        <img src={MARK_URI} width={72} height={72} alt="" />
         <div style={{ fontSize: 34, fontWeight: 800 }}>{BRAND.name}</div>
         <div style={{ marginLeft: "auto", fontSize: 28, fontWeight: 600, color: "#99f6e4" }}>{BRAND.domain}</div>
       </div>
