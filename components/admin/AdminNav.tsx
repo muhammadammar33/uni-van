@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Armchair, Building2, Bus, Car, IdCard, MessageSquareHeart, UserCog, Users } from "lucide-react";
+import { Armchair, Building2, Bus, Car, IdCard, MessageCircle, MessageSquareHeart, UserCog, Users } from "lucide-react";
 
-const ICONS = { trips: Bus, vehicles: Armchair, riders: Users, team: UserCog, orgs: Building2, carpool: Car, feedback: MessageSquareHeart, ids: IdCard };
+const ICONS = { trips: Bus, vehicles: Armchair, riders: Users, team: UserCog, orgs: Building2, carpool: Car, feedback: MessageSquareHeart, ids: IdCard, wa: MessageCircle };
 /** `badge`: a count to show (e.g. IDs waiting for review). */
 export type NavItem = { href: string; label: string; icon: keyof typeof ICONS; badge?: number };
 

@@ -30,6 +30,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       { href: "/admin/orgs", label: "Organisations", icon: "orgs" },
       { href: "/admin/rides", label: "Carpool", icon: "carpool" },
       { href: "/admin/feedback", label: "Feedback", icon: "feedback" },
+      { href: "/admin/whatsapp", label: "WhatsApp", icon: "wa" },
     );
 
   return (
