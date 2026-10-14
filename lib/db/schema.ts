@@ -291,6 +291,13 @@ export const feedback = pgTable(
   (t) => [index("feedback_created_idx").on(t.createdAt), index("feedback_ip_idx").on(t.ipHash)],
 );
 
+/** Attempt counters for rate limits (sign-in, booking codes, ride creation). Keys never hold raw IP addresses. */
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull(),
+  resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
+});
+
 export type Ride = typeof rides.$inferSelect;
 export type RidePoint = typeof ridePoints.$inferSelect;
 export type RideBooking = typeof rideBookings.$inferSelect;

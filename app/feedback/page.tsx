@@ -13,7 +13,8 @@ const pick = <T extends string>(v: unknown, options: readonly T[]): T | undefine
 
 export default async function FeedbackPage({ searchParams }: PageProps<"/feedback">) {
   const sp = await searchParams;
-  const from = typeof sp.from === "string" && sp.from.startsWith("/") ? sp.from : "/";
+  // Only paths on this site: "//other.site" or "/\\other.site" would leave it.
+  const from = typeof sp.from === "string" && /^\/(?![/\\])/.test(sp.from) ? sp.from : "/";
   return (
     <div className="min-h-dvh pb-16">
       <header className="bg-hero px-4 pb-16 pt-4 text-white">

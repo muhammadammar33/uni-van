@@ -36,6 +36,13 @@
       "when": 1791954430365,
       "tag": "0004_reviews_feedback",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791959472329,
+      "tag": "0005_rate_limits",
+      "breakpoints": true
     }
   ]
 }

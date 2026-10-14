@@ -3,7 +3,7 @@
 import bcrypt from "bcryptjs";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { endSession, ORG_COOKIE, requireAdmin, requireOrg, requireSuper, startSession } from "@/lib/auth";
@@ -11,6 +11,7 @@ import { db, requireDb, schema as s } from "@/lib/db";
 import { defaultTitle, normalizePhone } from "@/lib/format";
 import { busLayout, GENDERS, hiaceLayout, layoutConflicts, MAX_FARE, parseLayout, type Layout } from "@/lib/layout";
 import { ORG_TYPES, orgInfo, slugify } from "@/lib/orgTypes";
+import { bump, clientKey, isLimited } from "@/lib/rateLimit";
 import { readRiderRows } from "@/lib/riders";
 import { bookSeat, BookingError, loadTrip, markBooking, newDriverToken, newSlug, takenSeats } from "@/lib/trips";
 
@@ -44,17 +45,30 @@ async function ownVehicle(id: number) {
 
 /* ---------- Auth ---------- */
 
+/** Compared against when the email doesn't exist, so a wrong email takes as long as a wrong password. */
+const DUMMY_HASH = "$2b$12$WMohWM95.YdFwLVktmb/WuB0BbCA23GSOdTGVggM53vo8lMZLCKue";
+const LOGIN_WINDOW = 15 * 60;
+
 export async function login(_: FormState, form: FormData): Promise<FormState> {
   if (!db) return { error: "The database is not configured (DATABASE_URL)." };
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
+  // Slow down password guessing: 10 wrong tries per connection, or 20 per account, then wait 15 minutes.
+  const byIp = `login-ip:${clientKey(await headers())}`;
+  const byEmail = `login-email:${email}`;
+  if ((await isLimited(byIp, 10)) || (await isLimited(byEmail, 20)))
+    return { error: "Too many wrong tries. Please wait 15 minutes and try again." };
   const [row] = await db
     .select({ admin: s.admins, orgActive: s.organizations.active })
     .from(s.admins)
     .leftJoin(s.organizations, eq(s.organizations.id, s.admins.orgId))
     .where(eq(s.admins.email, email))
     .limit(1);
-  if (!row || !(await bcrypt.compare(password, row.admin.passwordHash))) return { error: "Wrong email or password." };
+  const valid = await bcrypt.compare(password, row?.admin.passwordHash ?? DUMMY_HASH);
+  if (!row || !valid) {
+    await Promise.all([bump(byIp, LOGIN_WINDOW), bump(byEmail, LOGIN_WINDOW)]);
+    return { error: "Wrong email or password." };
+  }
   if (row.admin.role !== "super" && row.orgActive === false) return { error: "This account is switched off. Contact Hamsafar support." };
   await startSession(row.admin);
   const next = String(form.get("next") ?? "");

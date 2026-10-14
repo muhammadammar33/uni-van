@@ -1,4 +1,5 @@
 import { handle, readJson } from "@/lib/api";
+import { clientKey, take } from "@/lib/rateLimit";
 import { createRide, searchRides } from "@/lib/rides";
 import { decodePoint } from "@/lib/places";
 
@@ -15,5 +16,8 @@ export async function GET(req: Request) {
 
 /** A driver offers a ride. Returns the public slug and the secret manage token. */
 export async function POST(req: Request) {
-  return handle(async () => createRide(await readJson(req)));
+  return handle(async () => {
+    await take(`ride-new:${clientKey(req.headers)}`, 10, 3600, "You've offered a lot of rides in the last hour. Please try again later.");
+    return createRide(await readJson(req));
+  });
 }
