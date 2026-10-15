@@ -4,7 +4,7 @@ import { BRAND } from "@/lib/brand";
 /** Lets phones add Hamsafar to the home screen with its own icon. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: `${BRAND.name}: carpool from Wah Cantt to Rawat`,
+    name: `${BRAND.name}: carpool in Islamabad, Rawalpindi & across Pakistan`,
     short_name: BRAND.name,
     description: BRAND.tagline,
     start_url: "/",

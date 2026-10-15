@@ -13,7 +13,7 @@ import { searchRides, type SearchResult } from "@/lib/rides";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: `${BRAND.name}: carpool from Wah Cantt to Rawat`,
+  title: `${BRAND.name}: carpool in Islamabad, Rawalpindi & across Pakistan`,
   description: "Find a seat in a car going your way across Islamabad and Rawalpindi, or between cities all over Pakistan. Or offer the empty seats in yours.",
 };
 
@@ -178,7 +178,7 @@ export default async function Home() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 text-sm text-slate-500 sm:px-6">
           <Logo />
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span>Carpooling from Wah Cantt to Rawat · {BRAND.domain}</span>
+            <span>Carpooling in the twin cities and across Pakistan · {BRAND.domain}</span>
             <Link href="/feedback?from=/" className="font-semibold text-brand hover:underline">
               Feedback
             </Link>

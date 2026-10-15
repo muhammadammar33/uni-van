@@ -8,7 +8,7 @@ export const contentType = "image/png";
 export default function Image() {
   return new ImageResponse(
     (
-      <OgFrame eyebrow="Carpool · Wah Cantt to Rawat" title="Share the ride. Split the fuel.">
+      <OgFrame eyebrow="Carpool · Islamabad, Rawalpindi & all of Pakistan" title="Share the ride. Split the fuel.">
         <div style={{ display: "flex", gap: 16 }}>
           <OgPill>Islamabad · Rawalpindi</OgPill>
           <OgPill>Rated drivers</OgPill>
