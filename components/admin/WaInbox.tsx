@@ -4,12 +4,27 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Paperclip, SendHorizontal, X } from "lucide-react";
 
-/** Refreshes the page every few seconds while it's on screen, so new messages and ticks appear. */
+/**
+ * Keeps the page up to date: every few seconds while it's on screen, at once when the app comes back to the
+ * front (phones pause timers in the background), and at once when a notification arrives.
+ */
 export function AutoRefresh({ seconds }: { seconds: number }) {
   const router = useRouter();
   useEffect(() => {
-    const t = setInterval(() => document.visibilityState === "visible" && router.refresh(), seconds * 1000);
-    return () => clearInterval(t);
+    const refresh = () => document.visibilityState === "visible" && router.refresh();
+    const t = setInterval(refresh, seconds * 1000);
+    const onMessage = (e: MessageEvent) => e.data?.type === "hamsafar-push" && router.refresh();
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("pageshow", refresh);
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("pageshow", refresh);
+      navigator.serviceWorker?.removeEventListener("message", onMessage);
+    };
   }, [router, seconds]);
   return null;
 }
