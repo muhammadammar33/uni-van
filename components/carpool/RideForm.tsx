@@ -408,6 +408,15 @@ export function RideForm({
       <button className="btn-primary w-full py-3.5 text-base" disabled={busy}>
         {busy ? "Saving…" : token ? "Save changes" : "Publish my ride"}
       </button>
+      {!token && (
+        <p className="text-center text-xs text-slate-500">
+          By publishing you agree to the{" "}
+          <a href="/terms" target="_blank" className="underline">
+            terms of use
+          </a>
+          .
+        </p>
+      )}
       {!token && <p className="text-center text-xs text-slate-500">No account needed. You get a private link to manage your ride: keep it safe.</p>}
       {idCheck.dialog}
       {phoneCheck.dialog}

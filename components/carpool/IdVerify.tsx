@@ -569,7 +569,11 @@ function IdDialog({ role, prefill, status, onDone }: { role: Mode; prefill: IdPr
         <label className="flex items-start gap-2 text-sm text-slate-700">
           <input type="checkbox" className="mt-1" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
           <span>
-            I agree that Hamsafar checks and keeps my ID to keep rides safe, as explained in the{" "}
+            I agree to the{" "}
+            <Link href="/terms" target="_blank" className="font-semibold text-brand underline">
+              terms of use
+            </Link>
+            , and that Hamsafar checks and keeps my ID to keep rides safe, as explained in the{" "}
             <Link href="/privacy" target="_blank" className="font-semibold text-brand underline">
               privacy page
             </Link>

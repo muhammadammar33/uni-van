@@ -319,6 +319,13 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
           <button className="btn-primary w-full py-3.5 text-base" disabled={!ready || busy}>
             {busy ? "Booking…" : `Book ${seats > 1 ? `${seats} seats` : "my seat"}${ride.fare !== null ? ` · ${formatFare(ride.fare * seats)}` : ""}`}
           </button>
+          <p className="text-center text-xs text-slate-500">
+            By booking you agree to the{" "}
+            <a href="/terms" target="_blank" className="underline">
+              terms of use
+            </a>
+            .
+          </p>
           <p className="text-center text-xs text-slate-500">You get the driver&apos;s number after booking. Your number is shown only to the driver.</p>
           {phoneCheck.dialog}
           {idCheck.dialog}

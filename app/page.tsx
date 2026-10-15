@@ -182,6 +182,9 @@ export default async function Home() {
             <Link href="/feedback?from=/" className="font-semibold text-brand hover:underline">
               Feedback
             </Link>
+            <Link href="/terms" className="font-semibold text-brand hover:underline">
+              Terms
+            </Link>
             <Link href="/privacy" className="font-semibold text-brand hover:underline">
               Privacy
             </Link>
