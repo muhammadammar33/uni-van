@@ -39,7 +39,8 @@ export default function PrivacyPage() {
           </S>
           <S title="What we keep">
             <ul className="list-disc space-y-1 pl-5">
-              <li>Your phone number (your account), name and gender.</li>
+              <li>From Google when you sign in: your name, email address and profile picture (never your password). Nothing is posted to your Google account.</li>
+              <li>Your WhatsApp number (checked once), name and gender.</li>
               <li>Your ID details (CNIC or B-form number, date of birth, expiry; a parent&apos;s name and CNIC for under-18s) and photos of the card and a selfie.</li>
               <li>For drivers: driving licence number, expiry and photo, and the car&apos;s registration number.</li>
               <li>Your rides, bookings and ratings. Your location only while you choose to share it (riders are shown blurred and without a name).</li>

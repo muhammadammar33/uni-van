@@ -6,6 +6,14 @@ Live at **[hamsafar.website](https://hamsafar.website)**.
 
 ## Carpool
 
+### Accounts (Google sign-in)
+
+- Riders and drivers sign in with **Google only** (no passwords). Searching and viewing rides stays open; offering a ride and booking a seat ask to sign in, then return to the same page.
+- Each account's WhatsApp number is checked once and then locked to it (one number per account); the ID check is linked through that number. Rides and bookings follow the person to any phone: **My account** (`/me`) lists their rides (with the manage page) and upcoming bookings, and a ride page shows their ticket.
+- Sign-in is off until `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set; until then the site works without accounts. Private manage links keep working either way.
+- Security: authorization code flow with PKCE, `state` and `nonce`; the ID token's signature, issuer, audience, expiry and verified email are checked; sessions are signed, HttpOnly cookies (180 days); sign-out is a POST; return paths are limited to this site. Setting `users.blocked_at` blocks an account.
+- Setup: Google Cloud Console → new project → **Google Auth Platform** (OAuth consent screen: app name Hamsafar, support email, logo, home page, privacy `/privacy` and terms `/terms` links, audience External, then Publish) → **Clients → Create client → Web application**, authorized redirect URI `https://hamsafar.website/api/auth/google/callback` → put the client ID and secret in Vercel and redeploy.
+
 ### City rides and rides between cities
 
 - **In the city**: every point is within Islamabad, Rawalpindi, Wah, Taxila and Rawat (`CITY_AREA` in `lib/cities.ts`), chosen from about 80 local places or a pin. Riders match when the route passes within about **3 km** of their pickup and drop-off.

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AccountButton } from "@/components/AccountButton";
 import { ArrowRight, Car, Check, MapPinned, MessageCircle, MessageSquareHeart, Route, ShieldCheck, Star, Users } from "lucide-react";
 import { LiveMap } from "@/components/carpool/LiveMap";
 import { LocationPrompt } from "@/components/carpool/LocationPrompt";
@@ -41,6 +42,7 @@ export default async function Home() {
           <Link href="/offer" className="ml-auto shrink-0 rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/20 backdrop-blur hover:bg-white/20">
             Offer a ride
           </Link>
+          <AccountButton next="/" />
         </div>
       </header>
 

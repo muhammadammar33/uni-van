@@ -32,18 +32,20 @@ function saveToken(phone: string, token: string) {
  * WhatsApp number check before booking or offering a ride. `ensure(phone)` resolves to a token for the API
  * ("" when this site doesn't check numbers), or null if the person closed the check. Render `dialog`.
  */
-export function usePhoneVerify(mode: VerifyMode) {
+/** `accountPhone`: the number already checked for the signed-in account (no new check for it). */
+export function usePhoneVerify(mode: VerifyMode, accountPhone?: string | null) {
   const [pending, setPending] = useState<{ phone: string; resolve: (t: string | null) => void } | null>(null);
   const ensure = useCallback(
     async (phoneRaw: string): Promise<string | null> => {
       if (!mode) return "";
       const phone = normalizePhone(phoneRaw);
       if (!phone) return null;
+      if (accountPhone && phone === accountPhone) return "";
       const saved = savedToken(phone);
       if (saved) return saved;
       return new Promise((resolve) => setPending({ phone, resolve }));
     },
-    [mode],
+    [mode, accountPhone],
   );
   const dialog =
     pending && mode ? (

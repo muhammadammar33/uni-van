@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AccountButton } from "@/components/AccountButton";
 import { ArrowLeft, Car } from "lucide-react";
 import { RideCard } from "@/components/carpool/RideCard";
 import { SearchBox } from "@/components/carpool/SearchBox";
@@ -41,6 +42,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
           <Link href="/offer" className="ml-auto rounded-xl bg-white/10 px-3 py-1.5 text-sm font-semibold ring-1 ring-white/20 hover:bg-white/20">
             Offer a ride
           </Link>
+          <AccountButton next="/search" />
         </div>
       </header>
       <main className="mx-auto grid max-w-5xl gap-6 px-4 py-6 lg:grid-cols-[22rem_1fr] [&>*]:min-w-0">

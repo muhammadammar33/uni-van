@@ -1,6 +1,7 @@
 import { handle, readJson } from "@/lib/api";
 import { clientKey, take } from "@/lib/rateLimit";
 import { createRide, searchRides } from "@/lib/rides";
+import { accountFor } from "@/lib/account";
 import { decodePoint } from "@/lib/places";
 import { kindFor } from "@/lib/cities";
 
@@ -21,6 +22,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   return handle(async () => {
     await take(`ride-new:${clientKey(req.headers)}`, 10, 3600, "You've offered a lot of rides in the last hour. Please try again later.");
-    return createRide(await readJson(req));
+    const user = await accountFor("offer a ride");
+    return createRide(await readJson(req), user);
   });
 }

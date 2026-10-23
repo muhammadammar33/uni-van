@@ -9,9 +9,10 @@ import { usePhoneVerify, VerifiedHint } from "@/components/carpool/PhoneVerify";
 import { KindTabs } from "@/components/carpool/KindTabs";
 import { PlacePicker } from "@/components/carpool/PlacePicker";
 import { GenderIcon } from "@/components/SeatMap";
-import { normalizePhone, todayLocal } from "@/lib/format";
+import { displayPhone, normalizePhone, todayLocal } from "@/lib/format";
 import { cleanIdNumber } from "@/lib/identityRules";
 import type { Gender } from "@/lib/layout";
+import type { Account } from "@/lib/account";
 import type { RideKind } from "@/lib/cities";
 import type { Point } from "@/lib/places";
 import { WEEKDAYS } from "@/lib/schedule";
@@ -82,10 +83,13 @@ export function RideForm({
   onSaved,
   verify = null,
   kind = "city",
+  account = null,
 }: {
   initial?: RideFormValues;
   /** The kind a new ride starts as (/offer?kind=intercity). */
   kind?: RideKind;
+  /** The signed-in driver: their name and checked number fill the form. */
+  account?: Account | null;
   token?: string;
   lockedRoute?: boolean;
   /** Called after an edit is saved (before the page refreshes). */
@@ -94,7 +98,7 @@ export function RideForm({
   verify?: VerifyMode;
 }) {
   const router = useRouter();
-  const phoneCheck = usePhoneVerify(verify);
+  const phoneCheck = usePhoneVerify(verify, account?.phone);
   const idCheck = useIdVerify();
   const [v, setV] = useState<RideFormValues>(() => initial ?? emptyRide(kind));
   // A returning driver's details, remembered on this phone.
@@ -105,7 +109,9 @@ export function RideForm({
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reading localStorage after hydration
       if (me) setV((cur) => ({ ...cur, driverName: me.driverName ?? "", driverPhone: me.driverPhone ?? "", driverGender: me.driverGender ?? null, car: me.car ?? "", plate: me.plate ?? "" }));
     } catch {}
-  }, [initial]);
+    // Signed in: the account's name and checked number.
+    if (account) setV((cur) => ({ ...cur, driverName: cur.driverName || account.name, driverPhone: account.phone ? displayPhone(account.phone) : cur.driverPhone }));
+  }, [initial, account]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (patch: Partial<RideFormValues>) => setV((cur) => ({ ...cur, ...patch }));
@@ -143,6 +149,11 @@ export function RideForm({
         );
         if (!st) throw new Error("Verify your ID to offer rides. It takes about 2 minutes, once.");
         ({ res, json } = await send());
+      }
+      // Signed out meanwhile (or the session ended): sign in, then back to the form.
+      if (res.status === 401 && json.code === "signin_required") {
+        window.location.assign(`/signin?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+        return;
       }
       if (!res.ok) throw new Error(json.error ?? "Couldn't save. Please try again.");
       try {
@@ -362,7 +373,19 @@ export function RideForm({
             <label className="label" htmlFor="driverPhone">
               Phone (WhatsApp) <span className="font-normal text-slate-400">(shown only to riders who book)</span>
             </label>
-            <input id="driverPhone" required type="tel" inputMode="tel" autoComplete="tel" className="input" value={v.driverPhone} onChange={(e) => set({ driverPhone: e.target.value })} placeholder="0300 1234567" />
+            <input
+              id="driverPhone"
+              required
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              className={`input ${account?.phone && !token ? "bg-slate-50 text-slate-600" : ""}`}
+              value={v.driverPhone}
+              readOnly={!!account?.phone && !token}
+              title={account?.phone && !token ? "Your account's WhatsApp number" : undefined}
+              onChange={(e) => set({ driverPhone: e.target.value })}
+              placeholder="0300 1234567"
+            />
             <VerifiedHint mode={verify} phone={v.driverPhone} />
           </div>
         </div>

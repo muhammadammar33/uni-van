@@ -7,7 +7,7 @@ import { normalizePhone, todayLocal } from "@/lib/format";
 import { checkId, cleanIdNumber, LICENSE_AUTHORITIES } from "@/lib/identityRules";
 import { clientKey, take } from "@/lib/rateLimit";
 import { BookingError } from "@/lib/trips";
-import { requireVerifiedPhone } from "@/lib/verify";
+import { phoneFor } from "@/lib/account";
 
 /* ---------- Encryption of ID photos ---------- */
 
@@ -105,10 +105,8 @@ export async function identityByPhone(phone: string) {
 }
 
 /** What this phone has done so far (needs the phone check token once WhatsApp verification is on). */
-export async function identityStatus(phoneRaw: unknown, token: unknown): Promise<IdStatus> {
-  const phone = normalizePhone(String(phoneRaw ?? ""));
-  if (!phone) throw new BookingError("Enter a valid phone number, e.g. 0300 1234567");
-  await requireVerifiedPhone(token, phone);
+export async function identityStatus(phoneRaw: unknown, token: unknown, user: s.User | null = null): Promise<IdStatus> {
+  const phone = await phoneFor(user, phoneRaw, token);
   return statusOf(await identityByPhone(phone));
 }
 
@@ -117,14 +115,12 @@ export async function identityStatus(phoneRaw: unknown, token: unknown): Promise
  * Drivers: the same plus driving licence and car registration. A rider who is already verified only adds the
  * licence to become a driver.
  */
-export async function submitIdentity(raw: unknown, h: Headers) {
+export async function submitIdentity(raw: unknown, h: Headers, user: s.User | null = null) {
   await take(`id-submit:${clientKey(h)}`, 8, 3600, "Too many attempts. Please try again in an hour.");
   const parsed = identityInput.safeParse(raw);
   if (!parsed.success) throw new BookingError(parsed.error.issues[0]?.message ?? "Check the form");
   const f = parsed.data;
-  const phone = normalizePhone(f.phone);
-  if (!phone) throw new BookingError("Enter a valid phone number, e.g. 0300 1234567");
-  await requireVerifiedPhone(f.phoneToken, phone);
+  const phone = await phoneFor(user, f.phone, f.phoneToken);
   await take(`id-submit-phone:${phone}`, 6, 3600, "Too many attempts for this number. Please try again in an hour.");
   const db = requireDb();
   const today = todayLocal();

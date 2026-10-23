@@ -155,6 +155,25 @@ export const rideScheduleEnum = pgEnum("ride_schedule", ["once", "daily", "weekl
 /** "pending": saved, but waits until the driver's ID is approved (then it goes live by itself). */
 export const rideStatusEnum = pgEnum("ride_status", ["active", "paused", "cancelled", "pending"]);
 /** "city": within the Islamabad area. "intercity": between cities anywhere in Pakistan. */
+/**
+ * People who signed in with Google (riders and drivers; admins sign in separately). Their WhatsApp number
+ * is checked once and kept here; their ID check is linked through that number.
+ */
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  /** Google's id for the person ("sub"): stays the same even if they change their email. */
+  googleSub: text("google_sub").notNull().unique(),
+  email: text("email").notNull(),
+  name: text("name").notNull(),
+  picture: text("picture"),
+  /** Verified WhatsApp number, "923001234567". One account per number. */
+  phone: text("phone").unique(),
+  /** Set by an admin to stop someone using Hamsafar. */
+  blockedAt: timestamp("blocked_at", { withTimezone: true }),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt,
+});
+
 export const rideKindEnum = pgEnum("ride_kind", ["city", "intercity"]);
 /** Who may ride: anyone, or only women / only men (e.g. a female driver taking female passengers). */
 export const rideRidersEnum = pgEnum("ride_riders", ["anyone", "female", "male"]);
@@ -169,6 +188,8 @@ export const rides = pgTable(
     kind: rideKindEnum("kind").default("city").notNull(),
     /** Secret for the driver's page. */
     manageToken: text("manage_token").notNull().unique(),
+    /** The signed-in driver who offered it (rides from before accounts have none). */
+    userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
     driverName: text("driver_name").notNull(),
     /** Digits with country code. Shown to riders once they have booked. */
     driverPhone: text("driver_phone").notNull(),
@@ -219,6 +240,8 @@ export const rideBookings = pgTable(
     rideId: integer("ride_id").notNull().references(() => rides.id, { onDelete: "cascade" }),
     /** The day of travel, "YYYY-MM-DD". */
     date: text("date").notNull(),
+    /** The signed-in rider (bookings from before accounts have none). */
+    userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
     name: text("name").notNull(),
     phone: text("phone").notNull(),
     gender: genderEnum("gender").notNull(),
@@ -480,3 +503,4 @@ export type DriverReview = typeof driverReviews.$inferSelect;
 export type Feedback = typeof feedback.$inferSelect;
 export type Identity = typeof identities.$inferSelect;
 export type WaMessage = typeof waMessages.$inferSelect;
+export type User = typeof users.$inferSelect;

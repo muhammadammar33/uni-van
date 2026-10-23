@@ -9,7 +9,7 @@ import { inCityArea, MATCH_RADIUS_KM, RIDE_KINDS, type RideKind } from "@/lib/ci
 import { GENDERS } from "@/lib/layout";
 import { BookingError } from "@/lib/trips";
 import { driverGate, identityByPhone, riderGate, verifiedDrivers } from "@/lib/identity";
-import { requireVerifiedPhone } from "@/lib/verify";
+import { phoneFor } from "@/lib/account";
 import { nextRuns, runOver, runsOn, type Schedule } from "@/lib/schedule";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -89,9 +89,10 @@ const tokenOf = (raw: unknown) => (raw && typeof raw === "object" ? (raw as { ph
 /** The CNIC number a returning driver types to confirm it's them. */
 const cnicOf = (raw: unknown) => (raw && typeof raw === "object" ? (raw as { driverCnic?: unknown }).driverCnic : undefined);
 
-export async function createRide(raw: unknown) {
+/** `user`: the signed-in driver (null only while Google sign-in isn't switched on). */
+export async function createRide(raw: unknown, user: s.User | null) {
   const { ride, points } = readRide(raw);
-  await requireVerifiedPhone(tokenOf(raw), ride.driverPhone);
+  ride.driverPhone = await phoneFor(user, ride.driverPhone, tokenOf(raw));
   if (ride.schedule === "once" && ride.date < todayLocal()) throw new BookingError("The date has already passed");
   // The driver's ID: rides of drivers still being checked are saved, and go live once they're approved.
   const { status, gender } = await driverGate(ride.driverPhone, cnicOf(raw));
@@ -101,7 +102,7 @@ export async function createRide(raw: unknown) {
   return db.transaction(async (tx) => {
     const [row] = await tx
       .insert(s.rides)
-      .values({ ...ride, status, slug: randomBytes(5).toString("base64url"), manageToken: randomBytes(16).toString("base64url") })
+      .values({ ...ride, status, userId: user?.id ?? null, slug: randomBytes(5).toString("base64url"), manageToken: randomBytes(16).toString("base64url") })
       .returning();
     await tx.insert(s.ridePoints).values(points.map((p, idx) => ({ rideId: row.id, idx, name: p.name, lat: p.lat, lng: p.lng, placeKey: p.key ?? null })));
     return { slug: row.slug, manageToken: row.manageToken, status };
@@ -109,7 +110,8 @@ export async function createRide(raw: unknown) {
 }
 
 /** Replaces a ride's details and route (only while nobody has booked a future date at a removed stop). */
-export async function updateRide(token: string, raw: unknown) {
+/** `user`: whoever is signed in, if anyone (the manage link is the key to the ride). */
+export async function updateRide(token: string, raw: unknown, user: s.User | null = null) {
   const { ride, points } = readRide(raw);
   const db = requireDb();
   return db.transaction(async (tx) => {
@@ -117,7 +119,7 @@ export async function updateRide(token: string, raw: unknown) {
     if (!row) throw new BookingError("Ride not found", 404);
     // A new number for the driver has to be checked like the first one.
     if (ride.driverPhone !== row.driverPhone) {
-      await requireVerifiedPhone(tokenOf(raw), ride.driverPhone);
+      ride.driverPhone = await phoneFor(user, ride.driverPhone, tokenOf(raw));
       const gate = await driverGate(ride.driverPhone, cnicOf(raw));
       if (gate.status === "pending" && row.status === "active") Object.assign(ride, { status: "pending" as const });
     }
@@ -400,13 +402,12 @@ function bookingView(r: s.Ride, pts: s.RidePoint[], b: s.RideBooking): RideBooki
   };
 }
 
-export async function bookRide(slug: string, raw: unknown): Promise<RideBookingView> {
+/** `user`: the signed-in rider (null only while Google sign-in isn't switched on). */
+export async function bookRide(slug: string, raw: unknown, user: s.User | null): Promise<RideBookingView> {
   const parsed = rideBookingInput.safeParse(raw);
   if (!parsed.success) throw new BookingError(parsed.error.issues[0]?.message ?? "Check your details");
   const input = parsed.data;
-  const phone = normalizePhone(input.phone);
-  if (!phone) throw new BookingError("Enter a valid phone number, e.g. 0300 1234567");
-  await requireVerifiedPhone(tokenOf(raw), phone);
+  const phone = await phoneFor(user, input.phone, tokenOf(raw));
   // Riders need an ID on file; their gender comes from it (that's what women-only rides check).
   const { gender } = await riderGate(phone);
   input.gender = gender;
@@ -433,21 +434,22 @@ export async function bookRide(slug: string, raw: unknown): Promise<RideBookingV
     if (input.seats > left) throw new BookingError(left === 0 ? "This ride is full on that day." : `Only ${left} seat${left === 1 ? "" : "s"} left on that day.`, 409);
     const [b] = await tx
       .insert(s.rideBookings)
-      .values({ rideId: r.id, date: input.date, name: input.name, phone, gender: input.gender, seats: input.seats, pickupIdx: input.pickupIdx, dropIdx: input.dropIdx, code: newCode() })
+      .values({ rideId: r.id, userId: user?.id ?? null, date: input.date, name: input.name, phone, gender: input.gender, seats: input.seats, pickupIdx: input.pickupIdx, dropIdx: input.dropIdx, code: newCode() })
       .returning();
     return bookingView(r, pts, b);
   });
 }
 
 /** A rider's bookings on a ride with this phone and code: the next one still to travel, and the latest done. */
-async function findBookings(slug: string, phoneRaw: string, code: string) {
+async function findBookings(slug: string, phoneRaw: string, code: string | null) {
   const phone = normalizePhone(phoneRaw);
-  if (!phone || !code) return null;
+  // No code: only for a signed-in account's own checked number (see bookingForAccount).
+  if (!phone || code === "") return null;
   const rows = await requireDb()
     .select({ ride: s.rides, booking: s.rideBookings })
     .from(s.rideBookings)
     .innerJoin(s.rides, eq(s.rides.id, s.rideBookings.rideId))
-    .where(and(eq(s.rides.slug, slug), eq(s.rideBookings.phone, phone), eq(s.rideBookings.code, code.trim().toUpperCase())))
+    .where(and(eq(s.rides.slug, slug), eq(s.rideBookings.phone, phone), code === null ? undefined : eq(s.rideBookings.code, code.trim().toUpperCase())))
     .orderBy(asc(s.rideBookings.date));
   if (!rows.length) return null;
   const ride = rows[0].ride;
@@ -464,7 +466,7 @@ async function findBookings(slug: string, phoneRaw: string, code: string) {
 export type RiderReview = { stars: number; comment: string | null };
 
 /** The rider's booking: the upcoming one to show as a ticket, otherwise the last one done (to rate the driver). */
-export async function lookupRideBooking(slug: string, phone: string, code: string) {
+export async function lookupRideBooking(slug: string, phone: string, code: string | null) {
   const f = await findBookings(slug, phone, code);
   if (!f) return null;
   if (f.upcoming) return { booking: bookingView(f.ride, f.pts, f.upcoming), state: "upcoming" as const, review: null };
@@ -732,4 +734,9 @@ export async function allRides() {
   const rows = await db.select().from(s.rides).where(ne(s.rides.status, "cancelled")).orderBy(sql`${s.rides.createdAt} desc`).limit(300);
   const pts = await pointsFor(rows.map((r) => r.id));
   return rows.map((r) => ({ ride: r, points: pts.filter((p) => p.rideId === r.id) }));
+}
+
+/** The signed-in person's booking on this ride (by their account's checked number), for any of their phones. */
+export async function bookingForAccount(slug: string, user: s.User | null) {
+  return user?.phone ? lookupRideBooking(slug, user.phone, null) : null;
 }

@@ -1,6 +1,7 @@
 import { handle, readJson } from "@/lib/api";
 import { BookingError } from "@/lib/trips";
 import { deleteRide, manageRide, setRideStatus, updateRide } from "@/lib/rides";
+import { currentUser } from "@/lib/account";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export async function PATCH(req: Request, ctx: RouteContext<"/api/rides/manage/[
     if (typeof body.status === "string" && Object.keys(body).length === 1) {
       if (!["active", "paused", "cancelled"].includes(body.status)) throw new BookingError("Invalid status");
       await setRideStatus(token, body.status as "active" | "paused" | "cancelled");
-    } else await updateRide(token, body);
+    } else await updateRide(token, body, await currentUser());
     return { ok: true };
   });
 }

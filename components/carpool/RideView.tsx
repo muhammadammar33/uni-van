@@ -16,6 +16,8 @@ import { displayPhone, formatDate, formatFare, formatTime, normalizePhone, today
 import { distanceKm, formatKm, nearestIndex } from "@/lib/geo";
 import type { Gender } from "@/lib/layout";
 import type { BookingLookup, LivePosition, PublicRide, RideBookingView, RiderReview } from "@/lib/rides";
+import type { Account } from "@/lib/account";
+import { GoogleButton } from "@/components/GoogleButton";
 import { addDays, describeSchedule } from "@/lib/schedule";
 import type { VerifyMode } from "@/lib/verify";
 
@@ -31,9 +33,28 @@ async function post<T>(url: string, body: unknown): Promise<T> {
 
 const dayWord = (d: string) => (d === todayLocal() ? "Today" : d === addDays(todayLocal(), 1) ? "Tomorrow" : formatDate(d));
 
-export function RideView({ slug, initial, start, verify = null }: { slug: string; initial: PublicRide; start: { date?: string; p?: number; d?: number }; verify?: VerifyMode }) {
+export function RideView({
+  slug,
+  initial,
+  start,
+  verify = null,
+  account = null,
+  needsSignIn = false,
+  mine = null,
+}: {
+  slug: string;
+  initial: PublicRide;
+  start: { date?: string; p?: number; d?: number };
+  verify?: VerifyMode;
+  /** The signed-in rider: their name and checked number fill the form. */
+  account?: Account | null;
+  /** Booking needs a Google sign-in first (nobody signed in). */
+  needsSignIn?: boolean;
+  /** The signed-in rider's booking on this ride, found from their account. */
+  mine?: BookingLookup | null;
+}) {
   const [ride, setRide] = useState(initial);
-  const phoneCheck = usePhoneVerify(verify);
+  const phoneCheck = usePhoneVerify(verify, account?.phone);
   const idCheck = useIdVerify();
   const loc = useMyLocation();
   const [driver, setDriver] = useState<LivePosition | null>(null);
@@ -81,9 +102,15 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
         setPhone(p.phone ?? "");
         if (ride.riders === "anyone" && p.gender) setGender(p.gender);
       }
-      const mine = JSON.parse(localStorage.getItem(bookingKey(slug)) ?? "null");
-      if (mine)
-        post<BookingLookup>(`/api/rides/${slug}/lookup`, mine)
+      // Signed in: the account's name and checked number.
+      if (account) {
+        setName((n) => n || account.name);
+        if (account.phone) setPhone(displayPhone(account.phone));
+      }
+      if (mine) showFound(mine);
+      const saved = JSON.parse(localStorage.getItem(bookingKey(slug)) ?? "null");
+      if (saved && !mine)
+        post<BookingLookup>(`/api/rides/${slug}/lookup`, saved)
           .then(showFound)
           .catch(() => localStorage.removeItem(bookingKey(slug)));
     } catch {}
@@ -106,10 +133,7 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
   const ready = !!run && run.left > 0 && drop > pickup && name.trim().length >= 2 && phoneOk && !!gender && ride.status === "active";
 
   const markers: MapMarker[] = useMemo(
-    () => [
-      ...(driver ? [{ lat: driver.lat, lng: driver.lng, kind: "driver" as const, label: driver.label ?? "Driver" }] : []),
-      ...(loc.pos ? [{ ...loc.pos, kind: "me" as const }] : []),
-    ],
+    () => [...(driver ? [{ lat: driver.lat, lng: driver.lng, kind: "driver" as const, label: driver.label ?? "Driver" }] : []), ...(loc.pos ? [{ ...loc.pos, kind: "me" as const }] : [])],
     [driver, loc.pos],
   );
 
@@ -135,6 +159,11 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
         const st = await idCheck.ensure("rider", { phone, phoneToken: phoneToken || undefined, name, gender }, json.idStatus);
         if (!st) throw new Error("Verify your ID once to book. It takes about a minute.");
         ({ res, json } = await send());
+      }
+      // Signed out meanwhile (or the session ended): sign in, then back here.
+      if (res.status === 401 && json.code === "signin_required") {
+        window.location.assign(`/signin?next=${encodeURIComponent(`/r/${slug}?date=${date}&p=${pickup}&d=${drop}`)}`);
+        return;
       }
       if (!res.ok) throw new Error(json.error ?? "Something went wrong. Please try again.");
       const r = json as { booking: RideBookingView };
@@ -216,7 +245,17 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
         </div>
       )}
 
-      {past && <RateDriver slug={slug} booking={past.booking} review={past.review} onSaved={(review) => { setPast({ ...past, review }); refresh(); }} />}
+      {past && (
+        <RateDriver
+          slug={slug}
+          booking={past.booking}
+          review={past.review}
+          onSaved={(review) => {
+            setPast({ ...past, review });
+            refresh();
+          }}
+        />
+      )}
 
       {booking ? (
         <Ticket booking={booking} onCancel={cancel} onBoarded={setBooking} busy={busy} slug={slug} verified={ride.verified} />
@@ -250,7 +289,16 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
               <label className="label" htmlFor="pickup">
                 Get on at
               </label>
-              <select id="pickup" className="input" value={pickup} onChange={(e) => { const i = Number(e.target.value); setPickup(i); if (drop <= i) setDrop(i + 1); }}>
+              <select
+                id="pickup"
+                className="input"
+                value={pickup}
+                onChange={(e) => {
+                  const i = Number(e.target.value);
+                  setPickup(i);
+                  if (drop <= i) setDrop(i + 1);
+                }}
+              >
                 {ride.points.slice(0, -1).map((p, i) => (
                   <option key={i} value={i}>
                     {p.name}
@@ -273,21 +321,34 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
               </select>
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="label" htmlFor="rname">
-                Your name
-              </label>
-              <input id="rname" className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
+          {!needsSignIn && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="rname">
+                  Your name
+                </label>
+                <input id="rname" className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
+              </div>
+              <div>
+                <label className="label" htmlFor="rphone">
+                  Phone (WhatsApp)
+                </label>
+                <input
+                  id="rphone"
+                  className={`input ${account?.phone ? "bg-slate-50 text-slate-600" : ""}`}
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="0300 1234567"
+                  value={phone}
+                  readOnly={!!account?.phone}
+                  title={account?.phone ? "Your account's WhatsApp number" : undefined}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+                {phone && !phoneOk ? <p className="mt-1 text-xs text-red-600">Enter a valid phone number.</p> : <VerifiedHint mode={verify} phone={phone} />}
+              </div>
             </div>
-            <div>
-              <label className="label" htmlFor="rphone">
-                Phone (WhatsApp)
-              </label>
-              <input id="rphone" className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="0300 1234567" value={phone} onChange={(e) => setPhone(e.target.value)} />
-              {phone && !phoneOk ? <p className="mt-1 text-xs text-red-600">Enter a valid phone number.</p> : <VerifiedHint mode={verify} phone={phone} />}
-            </div>
-          </div>
+          )}
           <div className="grid grid-cols-[1fr_auto] gap-3">
             <div className="grid grid-cols-2 gap-2">
               {(["female", "male"] as const).map((g) => {
@@ -303,7 +364,10 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
                       gender === g ? (g === "female" ? "border-female bg-female-lt text-female" : "border-male bg-male-lt text-male") : "border-slate-200 text-slate-600"
                     }`}
                   >
-                    <span aria-hidden><GenderIcon gender={g} className="size-4" /></span> {g === "female" ? "Female" : "Male"}
+                    <span aria-hidden>
+                      <GenderIcon gender={g} className="size-4" />
+                    </span>{" "}
+                    {g === "female" ? "Female" : "Male"}
                   </button>
                 );
               })}
@@ -316,9 +380,17 @@ export function RideView({ slug, initial, start, verify = null }: { slug: string
               ))}
             </select>
           </div>
-          <button className="btn-primary w-full py-3.5 text-base" disabled={!ready || busy}>
-            {busy ? "Booking…" : `Book ${seats > 1 ? `${seats} seats` : "my seat"}${ride.fare !== null ? ` · ${formatFare(ride.fare * seats)}` : ""}`}
-          </button>
+          {needsSignIn ? (
+            <div className="space-y-2 text-center">
+              {/* Back to this ride with the same day and stops after signing in. */}
+              <GoogleButton next={`/r/${slug}?date=${date}&p=${pickup}&d=${drop}`} label="Sign in with Google to book" className="w-full" />
+              <p className="text-xs text-slate-500">Once, so your bookings stay with you on any phone.</p>
+            </div>
+          ) : (
+            <button className="btn-primary w-full py-3.5 text-base" disabled={!ready || busy}>
+              {busy ? "Booking…" : `Book ${seats > 1 ? `${seats} seats` : "my seat"}${ride.fare !== null ? ` · ${formatFare(ride.fare * seats)}` : ""}`}
+            </button>
+          )}
           <p className="text-center text-xs text-slate-500">
             By booking you agree to the{" "}
             <a href="/terms" target="_blank" className="underline">

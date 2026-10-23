@@ -5,7 +5,9 @@ import { ArrowRight } from "lucide-react";
 import { RideView } from "@/components/carpool/RideView";
 import { Logo } from "@/components/Logo";
 import { formatFare, formatTime } from "@/lib/format";
-import { publicRide } from "@/lib/rides";
+import { bookingForAccount, publicRide } from "@/lib/rides";
+import { authEnabled, currentUser, publicAccount } from "@/lib/account";
+import { AccountButton } from "@/components/AccountButton";
 import { describeSchedule } from "@/lib/schedule";
 import { verifyMode } from "@/lib/verify";
 
@@ -29,6 +31,7 @@ export default async function RidePage({ params, searchParams }: PageProps<"/r/[
   const date = typeof sp.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : undefined;
   const from = ride.points[0].name;
   const to = ride.points[ride.points.length - 1].name;
+  const user = await currentUser();
   return (
     <div className="min-h-dvh">
       <header className="bg-hero px-4 pb-16 pt-4 text-white">
@@ -40,6 +43,7 @@ export default async function RidePage({ params, searchParams }: PageProps<"/r/[
             <Link href="/search" className="ml-auto rounded-xl bg-white/10 px-3 py-1.5 text-sm font-semibold ring-1 ring-white/20 hover:bg-white/20">
               Other rides
             </Link>
+            <AccountButton next={`/r/${slug}`} />
           </div>
           <div className="mt-6 flex flex-wrap items-center gap-2 text-2xl font-extrabold tracking-tight sm:text-3xl">
             <span>{from}</span>
@@ -52,7 +56,15 @@ export default async function RidePage({ params, searchParams }: PageProps<"/r/[
           </p>
         </div>
       </header>
-      <RideView slug={slug} initial={ride} start={{ date, p: num("p"), d: num("d") }} verify={verifyMode()} />
+      <RideView
+        slug={slug}
+        initial={ride}
+        start={{ date, p: num("p"), d: num("d") }}
+        verify={verifyMode()}
+        account={publicAccount(user)}
+        needsSignIn={authEnabled() && !user}
+        mine={await bookingForAccount(slug, user)}
+      />
     </div>
   );
 }
