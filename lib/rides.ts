@@ -10,6 +10,7 @@ import { GENDERS } from "@/lib/layout";
 import { BookingError } from "@/lib/trips";
 import { driverGate, identityByPhone, riderGate, verifiedDrivers } from "@/lib/identity";
 import { phoneFor } from "@/lib/account";
+import { assertPhoneNotBlocked } from "@/lib/people";
 import { nextRuns, runOver, runsOn, type Schedule } from "@/lib/schedule";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -117,6 +118,8 @@ export async function updateRide(token: string, raw: unknown, user: s.User | nul
   return db.transaction(async (tx) => {
     const [row] = await tx.select().from(s.rides).where(eq(s.rides.manageToken, token)).for("update");
     if (!row) throw new BookingError("Ride not found", 404);
+    await assertPhoneNotBlocked(row.driverPhone);
+    if (ride.driverPhone !== row.driverPhone) await assertPhoneNotBlocked(ride.driverPhone);
     // A new number for the driver has to be checked like the first one.
     if (ride.driverPhone !== row.driverPhone) {
       ride.driverPhone = await phoneFor(user, ride.driverPhone, tokenOf(raw));
@@ -156,6 +159,7 @@ export async function setRideStatus(token: string, status: s.Ride["status"]) {
   const [r] = await requireDb().select().from(s.rides).where(eq(s.rides.manageToken, token));
   if (!r) throw new BookingError("Ride not found", 404);
   if (status === "pending") throw new BookingError("Not allowed");
+  if (status === "active") await assertPhoneNotBlocked(r.driverPhone);
   // Only a driver whose ID is approved can put a ride live (a waiting ride goes live by itself on approval).
   if (status === "active" && r.status !== "active") {
     const i = await identityByPhone(r.driverPhone);

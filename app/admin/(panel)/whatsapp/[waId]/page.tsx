@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { personByPhone } from "@/lib/people";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download, FileText, MapPin, Phone } from "lucide-react";
 import { AutoRefresh, Composer, ScrollToEnd } from "@/components/admin/WaInbox";
@@ -69,6 +70,7 @@ export default async function WhatsAppChatPage({ params }: PageProps<"/admin/wha
   const name = msgs.findLast((m) => m.name)?.name ?? null;
   const lastIn = msgs.findLast((m) => m.direction === "in");
   const canReply = canReplyAfter(lastIn?.createdAt);
+  const person = await personByPhone(waId);
   return (
     <div className="-mx-4 sm:mx-0">
       <AutoRefresh seconds={5} />
@@ -78,7 +80,17 @@ export default async function WhatsAppChatPage({ params }: PageProps<"/admin/wha
         </Link>
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-xl font-extrabold">{name ?? `+${waId}`}</h1>
-          <p className="text-sm text-slate-500">+{waId}</p>
+          <p className="text-sm text-slate-500">
+            +{waId}
+            {person && (
+              <>
+                {" · "}
+                <Link href={`/admin/people/${person.id}`} className={person.blockedAt ? "font-semibold text-red-700" : "font-semibold text-brand"}>
+                  {person.blockedAt ? "blocked account" : "their account"}
+                </Link>
+              </>
+            )}
+          </p>
         </div>
         <a href={`tel:+${waId}`} className="grid size-10 place-items-center rounded-full border border-slate-200" aria-label="Call">
           <Phone className="size-4" />

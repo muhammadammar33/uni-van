@@ -170,6 +170,8 @@ export const users = pgTable("users", {
   phone: text("phone").unique(),
   /** Set by an admin to stop someone using Hamsafar. */
   blockedAt: timestamp("blocked_at", { withTimezone: true }),
+  blockReason: text("block_reason"),
+  blockedBy: integer("blocked_by").references(() => admins.id, { onDelete: "set null" }),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
   createdAt,
 });

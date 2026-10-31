@@ -28,6 +28,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   if (admin.role === "super")
     items.push(
       { href: "/admin/verifications", label: "Verifications", icon: "ids", badge: await pendingCount().catch(() => 0) },
+      { href: "/admin/people", label: "People", icon: "people" },
       { href: "/admin/orgs", label: "Organisations", icon: "orgs" },
       { href: "/admin/rides", label: "Carpool", icon: "carpool" },
       { href: "/admin/feedback", label: "Feedback", icon: "feedback" },

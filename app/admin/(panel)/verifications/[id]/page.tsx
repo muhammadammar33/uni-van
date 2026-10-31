@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { personByPhone } from "@/lib/people";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Check, ExternalLink, Eye, Trash2, X } from "lucide-react";
 import { approveId, deleteId, rejectId } from "@/app/admin/verificationActions";
@@ -32,6 +33,7 @@ export default async function VerificationDetail({ params, searchParams }: PageP
   if (!d) notFound();
   const sp = await searchParams;
   const { identity: i, docs, rides, bookings, views } = d;
+  const person = await personByPhone(i.phone);
   const docs2 = [...docs].sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind));
   const auth = i.licenseAuthority ? LICENSE_AUTHORITIES[i.licenseAuthority as LicenseAuthority] : null;
   const waiting = i.riderStatus === "pending" || i.driverStatus === "pending";
@@ -47,7 +49,14 @@ export default async function VerificationDetail({ params, searchParams }: PageP
       <Link href="/admin/verifications" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-ink">
         <ArrowLeft className="size-4" /> Verifications
       </Link>
-      <h1 className="text-2xl font-extrabold tracking-tight">{i.fullName}</h1>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <h1 className="text-2xl font-extrabold tracking-tight">{i.fullName}</h1>
+        {person && (
+          <Link href={`/admin/people/${person.id}`} className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${person.blockedAt ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600 hover:text-ink"}`}>
+            {person.blockedAt ? "Blocked account" : `Account: ${person.name}`} →
+          </Link>
+        )}
+      </div>
       <p className="mb-4 text-sm text-slate-500">
         Sent {when(i.submittedAt)} · {displayPhone(i.phone)} · Rider: <b>{i.riderStatus}</b>
         {i.driverStatus !== "none" && (
