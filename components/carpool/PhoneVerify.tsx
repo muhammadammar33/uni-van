@@ -192,6 +192,9 @@ function VerifyDialog({ phone, mode, onDone }: { phone: string; mode: NonNullabl
           <div className="mt-5 space-y-3">
             {!started && (
               <>
+                <p className="rounded-xl bg-[#25D366]/10 p-2.5 text-sm font-semibold text-[#075E54]">
+                  Use the WhatsApp number that&apos;s signed in on this phone ({shown}).
+                </p>
                 {mode.send && (
                   <button type="button" className="btn w-full bg-[#25D366] py-3 text-white hover:bg-[#1ebe5b]" disabled={busy} onClick={() => start("send")}>
                     {busy ? <LoaderCircle className="size-5 animate-spin" /> : <MessageCircle className="size-5" />} Send me a code on WhatsApp
@@ -242,6 +245,9 @@ function VerifyDialog({ phone, mode, onDone }: { phone: string; mode: NonNullabl
 
             {started?.method === "message" && (
               <>
+                <p className="rounded-xl bg-[#25D366]/10 p-2.5 text-sm font-semibold text-[#075E54]">
+                  Use the WhatsApp number that&apos;s signed in on this phone: the message has to come from {shown}.
+                </p>
                 <ol className="space-y-1 text-sm text-slate-700">
                   <li>1. Tap the button: WhatsApp opens with a message ready.</li>
                   <li>

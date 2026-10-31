@@ -89,7 +89,7 @@ export type IdStatus = {
   firstName: string | null;
 };
 
-const statusOf = (i: s.Identity | undefined): IdStatus => ({
+export const statusOf = (i: s.Identity | undefined): IdStatus => ({
   registered: !!i,
   riderStatus: i?.riderStatus ?? "none",
   driverStatus: i?.driverStatus ?? "none",

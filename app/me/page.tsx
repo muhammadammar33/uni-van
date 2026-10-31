@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, BadgeCheck, Car, LogOut, Phone, Plus, Ticket } from "lucide-react";
 import { Logo } from "@/components/Logo";
-import { currentUser, myTrips } from "@/lib/account";
+import { currentUser, myTrips, setupNeeded } from "@/lib/account";
 import { displayPhone, formatDate, formatTime, todayLocal } from "@/lib/format";
 import { identityByPhone } from "@/lib/identity";
 import { describeSchedule } from "@/lib/schedule";
@@ -23,7 +23,7 @@ const ID_LABEL: Record<string, string> = { none: "Not sent yet", pending: "Being
 export default async function MePage() {
   const u = await currentUser();
   if (!u) redirect("/signin?next=/me");
-  const [{ rides, bookings }, ident] = await Promise.all([myTrips(u), u.phone ? identityByPhone(u.phone) : null]);
+  const [{ rides, bookings }, ident, unfinished] = await Promise.all([myTrips(u), u.phone ? identityByPhone(u.phone) : null, setupNeeded(u)]);
   const today = todayLocal();
   return (
     <div className="min-h-dvh pb-16">
@@ -49,6 +49,16 @@ export default async function MePage() {
         </div>
       </header>
       <main className="mx-auto -mt-10 max-w-2xl space-y-4 px-4">
+        {unfinished && (
+          <Link href="/welcome?next=/me" className="card flex items-center gap-3 !bg-amber-50 ring-1 ring-amber-200">
+            <BadgeCheck className="size-6 shrink-0 text-amber-600" />
+            <span className="min-w-0 flex-1">
+              <span className="block font-bold text-amber-900">Finish setting up</span>
+              <span className="block text-sm text-amber-800">Verify your WhatsApp number and ID (once) to book and offer rides.</span>
+            </span>
+            <ArrowRight className="size-4 shrink-0 text-amber-700" />
+          </Link>
+        )}
         <section className="card divide-y divide-slate-100 !py-2">
           <div className="flex items-center gap-3 py-3">
             <Phone className="size-5 shrink-0 text-brand" />

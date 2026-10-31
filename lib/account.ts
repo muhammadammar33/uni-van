@@ -62,6 +62,21 @@ export async function phoneFor(user: s.User | null, phoneRaw: unknown, token: un
   return phone;
 }
 
+/**
+ * Setup still to do after signing in: their WhatsApp number, then their ID (sent, or approved). A turned-down
+ * ID counts as not done, so they're asked again.
+ */
+export async function setupNeeded(u: s.User): Promise<boolean> {
+  if (!u.phone) return true;
+  const [i] = await requireDb()
+    .select({ rider: s.identities.riderStatus, driver: s.identities.driverStatus })
+    .from(s.identities)
+    .where(eq(s.identities.phone, u.phone))
+    .limit(1);
+  const ok = (x?: string) => x === "pending" || x === "approved";
+  return !i || !(ok(i.rider) || ok(i.driver));
+}
+
 /** Saves (or updates) the person after Google sign-in; returns their id, or null if they're blocked. */
 export async function upsertGoogleUser(p: { sub: string; email: string; name: string; picture: string | null }) {
   const db = requireDb();

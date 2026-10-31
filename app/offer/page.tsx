@@ -4,7 +4,8 @@ import { ArrowLeft } from "lucide-react";
 import { RideForm } from "@/components/carpool/RideForm";
 import { Logo } from "@/components/Logo";
 import { verifyMode } from "@/lib/verify";
-import { authEnabled, currentUser, publicAccount } from "@/lib/account";
+import { authEnabled, currentUser, publicAccount, setupNeeded } from "@/lib/account";
+import { redirect } from "next/navigation";
 import { AccountButton } from "@/components/AccountButton";
 import { GoogleButton } from "@/components/GoogleButton";
 
@@ -17,6 +18,8 @@ export default async function OfferPage({ searchParams }: PageProps<"/offer">) {
   const kind = (await searchParams).kind === "intercity" ? "intercity" : "city";
   const user = await currentUser();
   const here = kind === "intercity" ? "/offer?kind=intercity" : "/offer";
+  // Signed in but not verified yet: number and ID first.
+  if (user && authEnabled() && (await setupNeeded(user))) redirect(`/welcome?next=${encodeURIComponent(here)}`);
   return (
     <div className="min-h-dvh pb-16">
       <header className="bg-hero px-4 pb-16 pt-4 text-white">

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { upsertGoogleUser } from "@/lib/account";
+import { setupNeeded, upsertGoogleUser } from "@/lib/account";
+import { requireDb, schema as s } from "@/lib/db";
+import { eq } from "drizzle-orm";
 import { finishSignIn } from "@/lib/google";
 import { OAUTH_COOKIE, readOAuthState, signUserSession, USER_COOKIE, USER_TTL } from "@/lib/userSession";
 
@@ -23,7 +25,10 @@ export async function GET(req: Request) {
     const profile = await finishSignIn(url.origin, code, saved.verifier, saved.nonce);
     const id = await upsertGoogleUser(profile);
     if (!id) return fail("This account can't use Hamsafar. Contact us through Feedback if you think it's a mistake.");
-    const res = NextResponse.redirect(new URL(saved.next, url.origin));
+    // New (or not yet verified): number and ID check first, then on to where they were going.
+    const [user] = await requireDb().select().from(s.users).where(eq(s.users.id, id)).limit(1);
+    const to = user && (await setupNeeded(user)) ? `/welcome?next=${encodeURIComponent(saved.next)}` : saved.next;
+    const res = NextResponse.redirect(new URL(to, url.origin));
     res.cookies.delete({ name: OAUTH_COOKIE, path: "/api/auth" });
     res.cookies.set(USER_COOKIE, await signUserSession(id), { httpOnly: true, secure: url.protocol === "https:", sameSite: "lax", path: "/", maxAge: USER_TTL });
     res.headers.set("cache-control", "no-store");
