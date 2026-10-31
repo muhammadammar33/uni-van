@@ -23,7 +23,7 @@ export default function PrivacyPage() {
             <Logo light />
           </Link>
           <h1 className="mt-6 text-3xl font-extrabold tracking-tight">Your privacy</h1>
-          <p className="mt-1 text-teal-50/90">What we keep, why, and who can see it. {BRAND.name} is a product of {BRAND.parent}.</p>
+          <p className="mt-1 text-teal-50/90">What we keep, why, and who can see it.</p>
         </div>
       </header>
       <main className="mx-auto -mt-10 max-w-2xl px-4">
