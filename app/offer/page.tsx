@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { RideForm } from "@/components/carpool/RideForm";
 import { Logo } from "@/components/Logo";
 import { verifyMode } from "@/lib/verify";
+import { identityByPhone } from "@/lib/identity";
 import { authEnabled, currentUser, publicAccount, setupNeeded } from "@/lib/account";
 import { redirect } from "next/navigation";
 import { AccountButton } from "@/components/AccountButton";
@@ -12,7 +13,7 @@ import { GoogleButton } from "@/components/GoogleButton";
 // Reads the WhatsApp verification setting at request time.
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "Offer a ride", description: "Fill the empty seats in your car. No sign-up." };
+export const metadata: Metadata = { title: "Offer a ride", description: "Fill the empty seats in your car and split the fuel." };
 
 export default async function OfferPage({ searchParams }: PageProps<"/offer">) {
   const kind = (await searchParams).kind === "intercity" ? "intercity" : "city";
@@ -20,6 +21,9 @@ export default async function OfferPage({ searchParams }: PageProps<"/offer">) {
   const here = kind === "intercity" ? "/offer?kind=intercity" : "/offer";
   // Signed in but not verified yet: number and ID first.
   if (user && authEnabled() && (await setupNeeded(user))) redirect(`/welcome?next=${encodeURIComponent(here)}`);
+  // The ID already sent with the account's number: no need to type the CNIC or choose a gender again.
+  const id = user?.phone ? await identityByPhone(user.phone) : undefined;
+  const idGender = id && id.driverStatus !== "none" && id.driverStatus !== "rejected" ? id.gender : null;
   return (
     <div className="min-h-dvh pb-16">
       <header className="bg-hero px-4 pb-16 pt-4 text-white">
@@ -31,7 +35,7 @@ export default async function OfferPage({ searchParams }: PageProps<"/offer">) {
             <AccountButton next={here} />
           </div>
           <h1 className="mt-6 text-3xl font-extrabold tracking-tight">Offer a ride</h1>
-          <p className="mt-1 text-teal-50/90">Going somewhere with empty seats? Share them and split the fuel. Takes two minutes, no account.</p>
+          <p className="mt-1 text-teal-50/90">Going somewhere with empty seats? Share them and split the fuel. Takes two minutes.</p>
         </div>
       </header>
       <main className="mx-auto -mt-10 max-w-2xl px-4">
@@ -45,7 +49,7 @@ export default async function OfferPage({ searchParams }: PageProps<"/offer">) {
             <GoogleButton next={here} className="w-full" />
           </div>
         ) : (
-          <RideForm verify={verifyMode()} kind={kind} account={publicAccount(user)} />
+          <RideForm verify={verifyMode()} kind={kind} account={publicAccount(user)} idGender={idGender} />
         )}
       </main>
     </div>

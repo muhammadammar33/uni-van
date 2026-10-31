@@ -241,12 +241,16 @@ const idError = (status: IdStatus, role: "driver" | "rider", message: string, co
  * Returns the status the new ride should get.
  */
 /** Whether a driver can offer rides: the status their rides get, and their gender from the ID. */
-export async function driverGate(phone: string, cnicRaw: unknown): Promise<{ status: "active" | "pending"; gender: s.Identity["gender"] }> {
+/**
+ * `ownsPhone`: the signed-in account has this number (proved by WhatsApp), so the ID on file for it is theirs and
+ * the CNIC needn't be typed again. Otherwise the typed CNIC must match the ID registered with the number.
+ */
+export async function driverGate(phone: string, cnicRaw: unknown, ownsPhone = false): Promise<{ status: "active" | "pending"; gender: s.Identity["gender"] }> {
   const i = await identityByPhone(phone);
   const st = statusOf(i);
   if (!i || i.driverStatus === "none") throw idError(st, "driver", "Verify your ID and driving licence once to offer rides.", "id_required");
   if (i.driverStatus === "rejected") throw idError(st, "driver", `Your ID wasn't approved: ${i.rejectReason ?? "please send it again"}.`, "id_rejected");
-  if (cleanIdNumber(String(cnicRaw ?? "")) !== i.idNumber) throw idError(st, "driver", "That CNIC number doesn't match the one registered with this phone number.", "cnic_mismatch");
+  if (!ownsPhone && cleanIdNumber(String(cnicRaw ?? "")) !== i.idNumber) throw idError(st, "driver", "That CNIC number doesn't match the one registered with this phone number.", "cnic_mismatch");
   return { status: i.driverStatus === "approved" ? "active" : "pending", gender: i.gender };
 }
 
@@ -389,4 +393,12 @@ export async function openDoc(docId: number, adminId: number) {
   if (!d) return null;
   await db.insert(s.idAccessLog).values({ adminId, identityId: d.identityId, docKind: d.kind });
   return { mime: d.mime, bytes: decryptDoc(d.data) };
+}
+
+/** The gender on the ID a signed-in person already sent (being checked or approved), so forms needn't ask again. */
+export async function idGenderFor(user: s.User | null): Promise<s.Identity["gender"] | null> {
+  if (!user?.phone) return null;
+  const i = await identityByPhone(user.phone);
+  const sent = (x?: string) => x === "pending" || x === "approved";
+  return i && (sent(i.riderStatus) || sent(i.driverStatus)) ? i.gender : null;
 }

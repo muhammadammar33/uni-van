@@ -41,6 +41,7 @@ export function RideView({
   account = null,
   needsSignIn = false,
   mine = null,
+  idGender = null,
 }: {
   slug: string;
   initial: PublicRide;
@@ -52,6 +53,8 @@ export function RideView({
   needsSignIn?: boolean;
   /** The signed-in rider's booking on this ride, found from their account. */
   mine?: BookingLookup | null;
+  /** Signed in with an ID already sent: its gender (not asked again). */
+  idGender?: Gender | null;
 }) {
   const [ride, setRide] = useState(initial);
   const phoneCheck = usePhoneVerify(verify, account?.phone);
@@ -66,7 +69,7 @@ export function RideView({
   const [seats, setSeats] = useState(1);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [gender, setGender] = useState<Gender | null>(ride.riders === "anyone" ? null : ride.riders);
+  const [gender, setGender] = useState<Gender | null>(idGender ?? (ride.riders === "anyone" ? null : ride.riders));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [booking, setBooking] = useState<RideBookingView | null>(null);
@@ -100,7 +103,7 @@ export function RideView({
         // eslint-disable-next-line react-hooks/set-state-in-effect -- reading localStorage after hydration
         setName(p.name ?? "");
         setPhone(p.phone ?? "");
-        if (ride.riders === "anyone" && p.gender) setGender(p.gender);
+        if (ride.riders === "anyone" && p.gender && !idGender) setGender(p.gender);
       }
       // Signed in: the account's name and checked number.
       if (account) {
@@ -345,11 +348,16 @@ export function RideView({
                   title={account?.phone ? "Your account's WhatsApp number" : undefined}
                   onChange={(e) => setPhone(e.target.value)}
                 />
-                {phone && !phoneOk ? <p className="mt-1 text-xs text-red-600">Enter a valid phone number.</p> : <VerifiedHint mode={verify} phone={phone} />}
+                {phone && !phoneOk ? <p className="mt-1 text-xs text-red-600">Enter a valid phone number.</p> : <VerifiedHint mode={verify} phone={phone} verified={!!account?.phone && normalizePhone(phone) === account.phone} />}
               </div>
             </div>
           )}
           <div className="grid grid-cols-[1fr_auto] gap-3">
+            {idGender ? (
+              <p className="flex items-center gap-1.5 self-center text-sm text-slate-600">
+                <GenderIcon gender={idGender} className={`size-4 ${idGender === "female" ? "text-female" : "text-male"}`} /> {idGender === "female" ? "Female" : "Male"}, from your ID
+              </p>
+            ) : (
             <div className="grid grid-cols-2 gap-2">
               {(["female", "male"] as const).map((g) => {
                 const allowed = ride.riders === "anyone" || ride.riders === g;
@@ -372,6 +380,7 @@ export function RideView({
                 );
               })}
             </div>
+            )}
             <select aria-label="Seats" className="input !w-28" value={seats} onChange={(e) => setSeats(Number(e.target.value))}>
               {Array.from({ length: Math.max(1, maxSeats) }, (_, i) => i + 1).map((n) => (
                 <option key={n} value={n}>

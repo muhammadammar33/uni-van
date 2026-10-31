@@ -63,7 +63,8 @@ export function usePhoneVerify(mode: VerifyMode, accountPhone?: string | null) {
 }
 
 /** "Verified" tick next to a phone field once this browser has checked that number. */
-export function VerifiedHint({ mode, phone }: { mode: VerifyMode; phone: string }) {
+/** `verified`: already known to be checked (the signed-in account's own number). */
+export function VerifiedHint({ mode, phone, verified = false }: { mode: VerifyMode; phone: string; verified?: boolean }) {
   const [ok, setOk] = useState(false);
   useEffect(() => {
     const p = normalizePhone(phone);
@@ -71,7 +72,7 @@ export function VerifiedHint({ mode, phone }: { mode: VerifyMode; phone: string 
     setOk(!!p && !!savedToken(p));
   }, [phone]);
   if (!mode) return null;
-  return ok ? (
+  return ok || verified ? (
     <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-emerald-700">
       <BadgeCheck className="size-3.5" /> WhatsApp number verified
     </p>

@@ -12,7 +12,7 @@ export default function Image() {
         <div style={{ display: "flex", gap: 16 }}>
           <OgPill>Islamabad · Rawalpindi</OgPill>
           <OgPill>Rated drivers</OgPill>
-          <OgPill accent>No sign-up</OgPill>
+          <OgPill accent>Verified IDs</OgPill>
         </div>
       </OgFrame>
     ),

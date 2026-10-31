@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, CircleAlert, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, CircleAlert, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { MapView } from "@/components/carpool/MapView";
 import { useIdVerify } from "@/components/carpool/IdVerify";
 import { usePhoneVerify, VerifiedHint } from "@/components/carpool/PhoneVerify";
@@ -84,6 +84,7 @@ export function RideForm({
   verify = null,
   kind = "city",
   account = null,
+  idGender = null,
 }: {
   initial?: RideFormValues;
   /** The kind a new ride starts as (/offer?kind=intercity). */
@@ -96,22 +97,26 @@ export function RideForm({
   onSaved?: () => void;
   /** How phone numbers are checked (null: they aren't). */
   verify?: VerifyMode;
+  /** Signed in with an ID already sent for this account's number: its gender (CNIC and gender aren't asked again). */
+  idGender?: Gender | null;
 }) {
   const router = useRouter();
   const phoneCheck = usePhoneVerify(verify, account?.phone);
   const idCheck = useIdVerify();
-  const [v, setV] = useState<RideFormValues>(() => initial ?? emptyRide(kind));
+  const [v, setV] = useState<RideFormValues>(() => initial ?? { ...emptyRide(kind), driverGender: idGender ?? null });
+  // New ride from an account whose number already has an ID on file: that ID is who's driving.
+  const idOnFile = !initial && !!account?.phone && !!idGender;
   // A returning driver's details, remembered on this phone.
   useEffect(() => {
     if (initial) return;
     try {
       const me = JSON.parse(localStorage.getItem("hamsafar:driver") ?? "null");
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reading localStorage after hydration
-      if (me) setV((cur) => ({ ...cur, driverName: me.driverName ?? "", driverPhone: me.driverPhone ?? "", driverGender: me.driverGender ?? null, car: me.car ?? "", plate: me.plate ?? "" }));
+      if (me) setV((cur) => ({ ...cur, driverName: me.driverName ?? "", driverPhone: me.driverPhone ?? "", driverGender: idGender ?? me.driverGender ?? null, car: me.car ?? "", plate: me.plate ?? "" }));
     } catch {}
     // Signed in: the account's name and checked number.
     if (account) setV((cur) => ({ ...cur, driverName: cur.driverName || account.name, driverPhone: account.phone ? displayPhone(account.phone) : cur.driverPhone }));
-  }, [initial, account]);
+  }, [initial, account, idGender]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (patch: Partial<RideFormValues>) => setV((cur) => ({ ...cur, ...patch }));
@@ -125,7 +130,7 @@ export function RideForm({
     if (!v.driverGender) return setError("Choose male or female.");
     // New rides, and edits that change the number, need a verified WhatsApp number.
     const phoneChanged = !initial || normalizePhone(initial.driverPhone) !== normalizePhone(v.driverPhone);
-    if (phoneChanged && !cleanIdNumber(v.driverCnic ?? "")) return setError("Enter your 13-digit CNIC number.");
+    if (phoneChanged && !idOnFile && !cleanIdNumber(v.driverCnic ?? "")) return setError("Enter your 13-digit CNIC number.");
     const phoneToken = phoneChanged ? await phoneCheck.ensure(v.driverPhone) : "";
     if (phoneToken === null) return setError(normalizePhone(v.driverPhone) ? "Verify your WhatsApp number to publish." : "Enter a valid phone number, e.g. 0300 1234567");
     setBusy(true);
@@ -386,10 +391,10 @@ export function RideForm({
               onChange={(e) => set({ driverPhone: e.target.value })}
               placeholder="0300 1234567"
             />
-            <VerifiedHint mode={verify} phone={v.driverPhone} />
+            <VerifiedHint mode={verify} phone={v.driverPhone} verified={!!account?.phone && normalizePhone(v.driverPhone) === account.phone} />
           </div>
         </div>
-        {(!initial || normalizePhone(initial.driverPhone) !== normalizePhone(v.driverPhone)) && (
+        {!idOnFile && (!initial || normalizePhone(initial.driverPhone) !== normalizePhone(v.driverPhone)) && (
           <div>
             <label className="label" htmlFor="driverCnic">
               CNIC number <span className="font-normal text-slate-400">(never shown to riders)</span>
@@ -406,6 +411,11 @@ export function RideForm({
             <p className="mt-1 text-xs text-slate-500">First time? We&apos;ll also ask for photos of your CNIC, licence and a selfie (about 2 minutes, once).</p>
           </div>
         )}
+        {idOnFile ? (
+          <p className="flex items-center gap-2 text-sm text-slate-600">
+            <ShieldCheck className="size-4 text-emerald-600" /> CNIC and gender come from the ID you sent.
+          </p>
+        ) : (
         <div className="grid grid-cols-2 gap-3">
           {(["female", "male"] as const).map((g) => (
             <button
@@ -421,6 +431,7 @@ export function RideForm({
             </button>
           ))}
         </div>
+        )}
       </section>
 
       {error && (
@@ -440,7 +451,7 @@ export function RideForm({
           .
         </p>
       )}
-      {!token && <p className="text-center text-xs text-slate-500">No account needed. You get a private link to manage your ride: keep it safe.</p>}
+      {!token && <p className="text-center text-xs text-slate-500">You get a private link to manage your ride: keep it safe.</p>}
       {idCheck.dialog}
       {phoneCheck.dialog}
     </form>

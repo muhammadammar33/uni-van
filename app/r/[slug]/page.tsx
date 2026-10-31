@@ -10,6 +10,7 @@ import { authEnabled, currentUser, publicAccount } from "@/lib/account";
 import { AccountButton } from "@/components/AccountButton";
 import { describeSchedule } from "@/lib/schedule";
 import { verifyMode } from "@/lib/verify";
+import { idGenderFor } from "@/lib/identity";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,7 @@ export default async function RidePage({ params, searchParams }: PageProps<"/r/[
         account={publicAccount(user)}
         needsSignIn={authEnabled() && !user}
         mine={await bookingForAccount(slug, user)}
+        idGender={await idGenderFor(user)}
       />
     </div>
   );

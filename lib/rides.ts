@@ -96,7 +96,7 @@ export async function createRide(raw: unknown, user: s.User | null) {
   ride.driverPhone = await phoneFor(user, ride.driverPhone, tokenOf(raw));
   if (ride.schedule === "once" && ride.date < todayLocal()) throw new BookingError("The date has already passed");
   // The driver's ID: rides of drivers still being checked are saved, and go live once they're approved.
-  const { status, gender } = await driverGate(ride.driverPhone, cnicOf(raw));
+  const { status, gender } = await driverGate(ride.driverPhone, cnicOf(raw), !!user?.phone && user.phone === ride.driverPhone);
   // Women-only rides rely on this, so it comes from the ID, not the form.
   ride.driverGender = gender;
   const db = requireDb();
@@ -123,7 +123,7 @@ export async function updateRide(token: string, raw: unknown, user: s.User | nul
     // A new number for the driver has to be checked like the first one.
     if (ride.driverPhone !== row.driverPhone) {
       ride.driverPhone = await phoneFor(user, ride.driverPhone, tokenOf(raw));
-      const gate = await driverGate(ride.driverPhone, cnicOf(raw));
+      const gate = await driverGate(ride.driverPhone, cnicOf(raw), !!user?.phone && user.phone === ride.driverPhone);
       if (gate.status === "pending" && row.status === "active") Object.assign(ride, { status: "pending" as const });
     }
     const ident = await identityByPhone(ride.driverPhone);

@@ -138,7 +138,7 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
             </div>
           </div>
           <div className="space-y-3 p-5 text-sm">
-            <p className="font-semibold text-red-700">Save this page&apos;s link: it&apos;s the only way to manage your ride (there&apos;s no account).</p>
+            <p className="font-semibold text-red-700">Save this page&apos;s link: you can also find this ride under My account.</p>
             <div className="flex flex-wrap gap-2">
               <a href={`https://wa.me/${ride.driverPhone}?text=${encodeURIComponent(`My Hamsafar ride (${title}). Manage it here: ${manageUrl}`)}`} target="_blank" rel="noreferrer" className="btn bg-[#25D366] text-white hover:bg-[#1ebe5b]">
                 <Send className="size-4" /> Send the link to my WhatsApp
