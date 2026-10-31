@@ -9,6 +9,8 @@ import { Logo } from "@/components/Logo";
 import { formatDate } from "@/lib/format";
 import { decodePoint, encodePoint } from "@/lib/places";
 import { searchRides } from "@/lib/rides";
+import { after } from "next/server";
+import { trackSearch } from "@/lib/analytics";
 import { kindFor } from "@/lib/cities";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +24,8 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   const date = str("date") && /^\d{4}-\d{2}-\d{2}$/.test(str("date")!) ? str("date")! : null;
   const kind = kindFor(str("kind"), from, to);
   const rides = await searchRides(from, to, date, kind);
+  // For the owner's analytics: which routes people look for, and which found nothing.
+  if (from && to) after(() => trackSearch(from.name, to.name, kind, rides.length).catch(() => {}));
   const keep = (r: { pickupIdx: number; dropIdx: number }) => {
     const q = new URLSearchParams();
     if (date) q.set("date", date);

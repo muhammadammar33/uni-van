@@ -1,4 +1,4 @@
-import { boolean, doublePrecision, index, integer, jsonb, pgEnum, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, doublePrecision, index, integer, jsonb, pgEnum, pgTable, primaryKey, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import type { Layout } from "../layout";
 
 export const directionEnum = pgEnum("trip_direction", ["to_uni", "to_home"]);
@@ -490,6 +490,32 @@ export const waMedia = pgTable("wa_media", {
   /** base64 */
   data: text("data").notNull(),
 });
+
+/**
+ * Site usage for the owner's analytics, as daily counts only: page views by section, searches by route
+ * (and those that found no ride). `day` is "YYYY-MM-DD" in Pakistan time.
+ */
+export const usageDaily = pgTable(
+  "usage_daily",
+  {
+    day: text("day").notNull(),
+    /** "view" (key = section, e.g. "/r"), "search" / "search_empty" (key = "From → To"). */
+    metric: text("metric").notNull(),
+    key: text("key").notNull().default(""),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.metric, t.key] })],
+);
+
+/** One row per visitor per day, to count unique visitors. `hash` is a one-way code (no IP address is kept). */
+export const visitorDays = pgTable(
+  "visitor_days",
+  {
+    day: text("day").notNull(),
+    hash: text("hash").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.hash] })],
+);
 
 /** Attempt counters for rate limits (sign-in, booking codes, ride creation). Keys never hold raw IP addresses. */
 export const rateLimits = pgTable("rate_limits", {

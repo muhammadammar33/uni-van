@@ -1,3 +1,4 @@
+import { Tracker } from "@/components/Tracker";
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { BRAND } from "@/lib/brand";
@@ -19,7 +20,10 @@ export const viewport: Viewport = { themeColor: "#0f766e", width: "device-width"
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={jakarta.variable}>
-      <body className="min-h-dvh antialiased">{children}</body>
+      <body className="min-h-dvh antialiased">
+        {children}
+        <Tracker />
+      </body>
     </html>
   );
 }

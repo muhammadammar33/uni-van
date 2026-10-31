@@ -69,6 +69,12 @@ Setup ([Meta for Developers](https://developers.facebook.com/) → create an app
 - Every new message sends a push notification to the admin's devices (turn it on from Admin → WhatsApp or Admin → Verifications); tapping it opens the conversation.
 - **Admin → WhatsApp → Setup** checks the Meta setup and connects the WhatsApp Business Account to the app.
 
+### Analytics (Admin → Analytics)
+
+- Totals since the start and for the last 7 / 30 / 90 days: people signed up, IDs verified and waiting, verified drivers, rides offered (city / intercity) and live, seats booked, passengers (unique numbers), trips completed (ride code entered), visitors, page views, WhatsApp messages and feedback.
+- Per-day charts (visitors, sign-ups, rides, seats) with a table view, and ranked lists: most booked routes, most searched routes, **searched but no ride found** (where to recruit drivers) and most visited pages.
+- Visits are counted on the site itself (`/api/track`, `usage_daily`, `visitor_days`): daily totals per section and a daily-changing one-way visitor code, no IP addresses, no third-party trackers; admin pages and bots aren't counted.
+
 ### Driver ratings
 
 - An hour after a ride leaves, the rider's booking turns into **"How was your ride with …?"**: 1 to 5 stars and an optional comment. From another phone, "Travelled with …? Rate the ride" asks for the phone number and booking code.

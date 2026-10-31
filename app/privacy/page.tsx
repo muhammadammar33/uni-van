@@ -43,6 +43,7 @@ export default function PrivacyPage() {
               <li>Your WhatsApp number (checked once), name and gender.</li>
               <li>Your ID details (CNIC or B-form number, date of birth, expiry; a parent&apos;s name and CNIC for under-18s) and photos of the card and a selfie.</li>
               <li>For drivers: driving licence number, expiry and photo, and the car&apos;s registration number.</li>
+              <li>Visit counts for our own statistics: daily totals per page and a code that changes every day, never your IP address. No outside analytics or advertising trackers.</li>
               <li>Your rides, bookings and ratings. Your location only while you choose to share it (riders are shown blurred and without a name).</li>
             </ul>
           </S>
