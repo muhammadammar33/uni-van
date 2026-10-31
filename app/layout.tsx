@@ -12,6 +12,8 @@ export const metadata: Metadata = {
   title: { default: `${BRAND.name}: carpool in Islamabad, Rawalpindi & across Pakistan`, template: `%s · ${BRAND.name}` },
   description: BRAND.tagline,
   applicationName: BRAND.name,
+  creator: BRAND.parent,
+  publisher: BRAND.parent,
   openGraph: { siteName: BRAND.name, type: "website" },
 };
 

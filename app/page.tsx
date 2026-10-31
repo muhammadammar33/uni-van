@@ -8,6 +8,7 @@ import { RideCard } from "@/components/carpool/RideCard";
 import { SearchBox } from "@/components/carpool/SearchBox";
 import { Logo } from "@/components/Logo";
 import { BRAND } from "@/lib/brand";
+import { MaczacCredit, MaczacPresents } from "@/components/Maczac";
 import { db } from "@/lib/db";
 import { searchRides, type SearchResult } from "@/lib/rides";
 
@@ -50,6 +51,7 @@ export default async function Home() {
         <div className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:radial-gradient(white_1px,transparent_1px)] [background-size:22px_22px]" />
         <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 sm:px-6 lg:grid-cols-[1fr_28rem]">
           <div className="animate-rise">
+            <MaczacPresents className="mb-4 flex" />
             <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm font-medium text-teal-50 ring-1 ring-white/20">
               <Route className="size-4 text-accent" /> Wah Cantt · Taxila · Islamabad · Rawalpindi · Rawat
             </span>
@@ -178,7 +180,10 @@ export default async function Home() {
 
       <footer className="border-t border-slate-100 py-8">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 text-sm text-slate-500 sm:px-6">
-          <Logo />
+          <span className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Logo />
+            <MaczacCredit />
+          </span>
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span>Carpooling in the twin cities and across Pakistan · {BRAND.domain}</span>
             <Link href="/feedback?from=/" className="font-semibold text-brand hover:underline">

@@ -32,6 +32,7 @@ import { formatDateRange, formatFare, formatTime, todayLocal } from "@/lib/forma
 import { ORG_TYPE_INFO, ORG_TYPES, orgInfo } from "@/lib/orgTypes";
 import { fareRange, seatList } from "@/lib/layout";
 import { closedReason } from "@/lib/trips";
+import { MaczacCredit } from "@/components/Maczac";
 
 export const dynamic = "force-dynamic";
 
@@ -603,7 +604,10 @@ function Footer() {
   return (
     <footer className="border-t border-slate-100 py-8">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 text-sm text-slate-500 sm:px-6">
-        <Logo />
+        <span className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Logo />
+          <MaczacCredit />
+        </span>
         <span>{BRAND.tagline}</span>
       </div>
     </footer>

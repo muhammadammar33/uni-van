@@ -1,6 +1,8 @@
 /** The platform's name and contact, set per deployment. Each client organisation has its own name in the database. */
 export const BRAND = {
   name: process.env.NEXT_PUBLIC_PLATFORM_NAME || "Hamsafar",
+  /** The parent organisation: "MACZAC presents Hamsafar". */
+  parent: "MACZAC",
   tagline: process.env.NEXT_PUBLIC_PLATFORM_TAGLINE || "Carpooling in Islamabad, Rawalpindi and between cities across Pakistan.",
   /** The site's own domain, shown in footers and link previews. */
   domain: process.env.NEXT_PUBLIC_SITE_DOMAIN || "hamsafar.website",

@@ -58,6 +58,7 @@ export default function TermsPage() {
               connect drivers and riders; we are <b>not</b> a taxi, transport or bus company, we don&apos;t own cars, and drivers don&apos;t work for us. Each ride is
               an arrangement between the driver and the riders.
             </p>
+            <p>{BRAND.name} is a product of {BRAND.parent}.</p>
           </S>
 
           <S n={2} title="Who can use it">
