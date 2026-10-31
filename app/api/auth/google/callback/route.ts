@@ -5,6 +5,7 @@ import { requireDb, schema as s } from "@/lib/db";
 import { eq } from "drizzle-orm";
 import { finishSignIn } from "@/lib/google";
 import { OAUTH_COOKIE, readOAuthState, signUserSession, USER_COOKIE, USER_TTL } from "@/lib/userSession";
+import { logError } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ export async function GET(req: Request) {
     res.headers.set("cache-control", "no-store");
     return res;
   } catch (err) {
-    console.error("google sign-in", err);
+    logError("google sign-in", err);
     return fail("Google sign-in didn't work. Please try again.");
   }
 }

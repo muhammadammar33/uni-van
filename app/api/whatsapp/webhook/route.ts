@@ -5,6 +5,7 @@ import { receivedMessage } from "@/lib/verify";
 import { validSignature, waConfig } from "@/lib/whatsapp";
 import { logWebhook, maskPhone } from "@/lib/webhookLog";
 import { bump } from "@/lib/rateLimit";
+import { logError } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
       for (const m of c.value?.messages ?? []) {
         if (!m.from) continue;
         const text = m.text?.body ?? m.button?.text ?? "";
-        const result = text ? await receivedMessage(m.from, text).catch((err) => (console.error("webhook", err), "error")) : `${m.type}`;
+        const result = text ? await receivedMessage(m.from, text).catch((err) => (logError("webhook", err), "error")) : `${m.type}`;
         log.push({ result, from: maskPhone(m.from) });
         // Codes are for the website, not the inbox.
         const isCode = result === "verified" || result === "wrong_number" || /hamsafar code/i.test(text);
@@ -72,8 +73,8 @@ export async function POST(req: Request) {
   // Saving photos and voice notes and notifying the admin happens after Meta has its answer.
   if (toInbox.length || statuses.length)
     after(async () => {
-      for (const { m, name } of toInbox) await saveIncoming(m, name).catch((err) => console.error("inbox", err));
-      for (const st of statuses) await saveStatus(st).catch((err) => console.error("inbox status", err));
+      for (const { m, name } of toInbox) await saveIncoming(m, name).catch((err) => logError("inbox", err));
+      for (const st of statuses) await saveStatus(st).catch((err) => logError("inbox status", err));
     });
   // Always 200 so Meta doesn't retry.
   return NextResponse.json({ ok: true });

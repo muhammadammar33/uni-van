@@ -34,9 +34,9 @@ export async function trackView(path: string, h: Headers) {
   const ua = h.get("user-agent") ?? "";
   const sec = section(path);
   if (!sec || BOT.test(ua)) return;
-  const ip = (h.get("x-forwarded-for") ?? "").split(",")[0].trim() || h.get("x-real-ip") || "";
+  const ip = (h.get("x-vercel-forwarded-for") || h.get("x-forwarded-for") || "").split(",")[0].trim() || h.get("x-real-ip") || "";
   // A visitor can only add so much: stops a script from inflating the numbers or the table.
-  if ((await bumpLimit(`track:${createHash("sha256").update(ip).digest("base64url").slice(0, 16)}`, 3600)) > 300) return;
+  if ((await bumpLimit(`track:${createHash("sha256").update(`${process.env.AUTH_SECRET ?? ""}:${ip}`).digest("base64url").slice(0, 16)}`, 3600)) > 300) return;
   const day = todayLocal();
   // Changes every day and can't be turned back into the address.
   const hash = createHash("sha256").update(`${day}|${ip}|${ua}|${process.env.AUTH_SECRET ?? ""}`).digest("base64url").slice(0, 22);

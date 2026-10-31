@@ -2,15 +2,23 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { BookingError } from "@/lib/trips";
 
+/** API answers often carry phone numbers, booking codes or names: never kept in a (shared) browser's cache. */
+const NO_STORE = { "cache-control": "private, no-store" };
+
+/** Logs an error without its details: database errors carry the query's values (names, CNICs, phone numbers). */
+export function logError(label: string, err: unknown) {
+  const e = err as { name?: string; code?: string; statusCode?: number; cause?: { code?: string; message?: string } } | null;
+  const cause = String(e?.cause?.message ?? "").slice(0, 120).replace(/\d{6,}/g, (d) => `…${d.slice(-3)}`);
+  console.error(`${label}:`, e?.name ?? "Error", e?.code ?? e?.statusCode ?? e?.cause?.code ?? "", cause);
+}
+
 /** Runs a route handler body, turning BookingErrors into `{ error }` JSON with their status. */
 export async function handle(fn: () => Promise<unknown>) {
   try {
-    return NextResponse.json(await fn());
+    return NextResponse.json(await fn(), { headers: NO_STORE });
   } catch (err) {
-    if (err instanceof BookingError) return NextResponse.json({ error: err.message, ...err.extra }, { status: err.status });
-    // Never the whole error: database errors carry the query's values (names, CNICs, phone numbers).
-    const e = err as { name?: string; code?: string; cause?: { code?: string; message?: string } };
-    console.error("request failed:", e?.name ?? "Error", e?.code ?? e?.cause?.code ?? "", String(e?.cause?.message ?? "").slice(0, 120));
+    if (err instanceof BookingError) return NextResponse.json({ error: err.message, ...err.extra }, { status: err.status, headers: NO_STORE });
+    logError("request failed", err);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
 }

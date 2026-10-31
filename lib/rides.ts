@@ -1,6 +1,6 @@
 import "server-only";
 import { createHmac, randomBytes, randomInt } from "node:crypto";
-import { and, asc, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireDb, schema as s } from "@/lib/db";
 import { normalizePhone, nowLocal, todayLocal } from "@/lib/format";
@@ -151,6 +151,10 @@ export async function updateRide(token: string, raw: unknown, user: s.User | nul
 
 /** Removes a ride with its route, bookings and live position. */
 export async function deleteRide(token: string) {
+  const [r] = await requireDb().select({ phone: s.rides.driverPhone }).from(s.rides).where(eq(s.rides.manageToken, token));
+  if (!r) throw new BookingError("Ride not found", 404);
+  // A blocked driver can't wipe the ride and its bookings (they may be needed to look into what happened).
+  await assertPhoneNotBlocked(r.phone);
   const deleted = await requireDb().delete(s.rides).where(eq(s.rides.manageToken, token)).returning({ id: s.rides.id });
   if (!deleted.length) throw new BookingError("Ride not found", 404);
 }
@@ -502,21 +506,26 @@ export async function boardRide(slug: string, phone: string, code: string, rawRi
   const b = [f?.upcoming, f?.past].find((x) => x?.date === today);
   if (!f || !b) throw new BookingError("No booking for today found for that phone number and code.", 404);
   if (b.boardedAt) return bookingView(f.ride, f.pts, b);
-  if (b.boardTries >= BOARD_TRIES)
-    throw new BookingError("Too many wrong codes. Don't get in: call the driver on the number in your booking, or 15 if you feel unsafe.", 429, { code: "board_locked", triesLeft: 0 });
+  const locked = () =>
+    new BookingError("Too many wrong codes. Don't get in: call the driver on the number in your booking, or 15 if you feel unsafe.", 429, { code: "board_locked", triesLeft: 0 });
   const given = String(rawRideCode ?? "").replace(/\D/g, "");
   const db = requireDb();
+  // Each try is claimed before the code is compared, so tries sent all at once can't get past the limit.
+  const [claim] = await db
+    .update(s.rideBookings)
+    .set({ boardTries: sql`${s.rideBookings.boardTries} + 1` })
+    .where(and(eq(s.rideBookings.id, b.id), lt(s.rideBookings.boardTries, BOARD_TRIES)))
+    .returning({ tries: s.rideBookings.boardTries });
+  if (!claim) throw locked();
   if (given !== rideCode(f.ride.id, b.date)) {
-    // Atomic, so tries can't be raced past the limit.
-    const [row] = await db
-      .update(s.rideBookings)
-      .set({ boardTries: sql`${s.rideBookings.boardTries} + 1` })
-      .where(eq(s.rideBookings.id, b.id))
-      .returning({ tries: s.rideBookings.boardTries });
-    const triesLeft = Math.max(0, BOARD_TRIES - row.tries);
+    const triesLeft = Math.max(0, BOARD_TRIES - claim.tries);
     throw new BookingError("That code doesn't match. Don't get in: this may not be the driver you booked.", 400, { code: "wrong_ride_code", triesLeft });
   }
-  const [row] = await db.update(s.rideBookings).set({ boardedAt: new Date(), noShowAt: null }).where(eq(s.rideBookings.id, b.id)).returning();
+  const [row] = await db
+    .update(s.rideBookings)
+    .set({ boardedAt: new Date(), noShowAt: null, boardTries: sql`greatest(${s.rideBookings.boardTries} - 1, 0)` })
+    .where(eq(s.rideBookings.id, b.id))
+    .returning();
   return bookingView(f.ride, f.pts, row);
 }
 
@@ -592,6 +601,7 @@ export async function reviewDriver(slug: string, raw: unknown) {
   const f = await findBookings(slug, phone, code);
   if (!f) throw new BookingError("No booking found for that phone number and code.", 404);
   if (!f.past) throw new BookingError("You can rate the driver once your ride is done.", 409);
+  await assertPhoneNotBlocked(f.past.phone);
   const values = {
     driverPhone: f.ride.driverPhone,
     riderPhone: f.past.phone,
@@ -699,6 +709,7 @@ export async function shareLive(raw: unknown) {
   if (role === "driver") {
     const [r] = token ? await requireDb().select().from(s.rides).where(eq(s.rides.manageToken, token)) : [];
     if (!r) throw new BookingError("Only a ride's driver can share as driver", 403);
+    await assertPhoneNotBlocked(r.driverPhone);
     rideId = r.id;
     label = r.driverName.split(" ")[0];
   } else ({ lat, lng } = blur({ lat, lng }));
@@ -718,7 +729,7 @@ export async function livePositions(rideSlug?: string) {
     .select({ p: s.livePositions, slug: s.rides.slug, status: s.rides.status })
     .from(s.livePositions)
     .leftJoin(s.rides, eq(s.rides.id, s.livePositions.rideId))
-    .where(rideSlug ? and(fresh, eq(s.rides.slug, rideSlug)) : and(fresh, sql`(${s.livePositions.role} = 'rider' or ${s.rides.status} <> 'cancelled')`))
+    .where(rideSlug ? and(fresh, eq(s.rides.slug, rideSlug)) : and(fresh, sql`(${s.livePositions.role} = 'rider' or ${s.rides.status} = 'active')`))
     // Drivers first and newest first, so a flood of rider dots can never push drivers off the map.
     .orderBy(sql`case when ${s.livePositions.role} = 'driver' then 0 else 1 end`, desc(s.livePositions.updatedAt))
     .limit(500);

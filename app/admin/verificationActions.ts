@@ -5,12 +5,13 @@ import { redirect } from "next/navigation";
 import { requireSuper } from "@/lib/auth";
 import { approveIdentity, deleteIdentity, rejectIdentity } from "@/lib/identity";
 import { sendTemplate, waConfig } from "@/lib/whatsapp";
+import { logError } from "@/lib/api";
 
 const idOf = (fd: FormData) => Number(fd.get("id")) || 0;
 
 /** Optional WhatsApp note to the person (needs an approved "Utility" template with {{1}} = first name). */
 async function tellPerson(phone: string, template: string | undefined, name: string) {
-  if (template && waConfig().canSend) await sendTemplate(phone, template, [name.split(" ")[0]]).catch((err) => console.error("WhatsApp notice failed", err));
+  if (template && waConfig().canSend) await sendTemplate(phone, template, [name.split(" ")[0]]).catch((err) => logError("WhatsApp notice failed", err));
 }
 
 export async function approveId(fd: FormData) {

@@ -225,7 +225,6 @@ export async function bookSeat(where: { slug: string } | { id: number }, raw: un
     const existing = await tx.select().from(s.bookings).where(eq(s.bookings.tripId, trip.id));
     const mine = existing.filter((b) => b.phone === phone);
     if (mine.length) {
-      const labels = mine.map((b) => findSeat(trip.layout, b.seatId)?.label ?? b.seatId).join(", ");
       throw new BookingError(
         "This phone number already has seats on this trip. Cancel that booking first to change seats.",
         409,
@@ -352,8 +351,14 @@ export async function markBooking(where: { driverToken: string } | { id: number 
   const parsed = markInput.safeParse(raw);
   if (!parsed.success) throw new BookingError("Invalid request");
   const { bookingId, field, value } = parsed.data;
-  const [trip] = await requireDb().select({ id: s.trips.id }).from(s.trips).where(tripCond(where)).limit(1);
-  if (!trip) throw new BookingError("Trip not found", 404);
+  const [trip] = await requireDb()
+    .select({ id: s.trips.id, active: s.organizations.active })
+    .from(s.trips)
+    .innerJoin(s.organizations, eq(s.organizations.id, s.trips.orgId))
+    .where(tripCond(where))
+    .limit(1);
+  // A switched-off organisation's driver links stop working (admins can still tick passengers).
+  if (!trip || ("driverToken" in where && !trip.active)) throw new BookingError("Trip not found", 404);
   const updated = await requireDb()
     .update(s.bookings)
     .set({ [field]: value })

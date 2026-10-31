@@ -4,6 +4,7 @@ import webpush from "web-push";
 import { requireDb, schema as s } from "@/lib/db";
 import { canonicalUrl } from "@/lib/url";
 import { sendTemplate, waConfig } from "@/lib/whatsapp";
+import { logError } from "@/lib/api";
 
 /**
  * The site's own push-notification keys, made once and kept in the database (so there's nothing to set up).
@@ -53,9 +54,9 @@ export async function alertAdmins(title: string, body: string, path: string, tag
       ),
     );
   } catch (err) {
-    console.error("push alert failed", err);
+    logError("push alert failed", err);
   }
   const to = (process.env.ADMIN_WHATSAPP ?? "").replace(/\D/g, "");
   const template = process.env.WHATSAPP_ALERT_TEMPLATE?.trim();
-  if (to && template && waConfig().canSend) await sendTemplate(to, template, [`${title}: ${body}`]).catch((err) => console.error("WhatsApp alert failed", err));
+  if (to && template && waConfig().canSend) await sendTemplate(to, template, [`${title}: ${body}`]).catch((err) => logError("WhatsApp alert failed", err));
 }

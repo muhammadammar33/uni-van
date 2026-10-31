@@ -5,6 +5,11 @@ const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
   // Nobody may show the site inside a frame on their own page (clickjacking).
   { key: "X-Frame-Options", value: "DENY" },
+];
+
+/** The site's CSP. Not sent with admin media / ID photo files: those set their own stricter, sandboxed one,
+ * and Next keeps a header set here in place of the route's own. */
+const csp = [
   // What pages may load: only this site, plus the map tiles (OpenStreetMap), place names for dropped pins
   // (Nominatim) and Google profile pictures. 'wasm-unsafe-eval' and blob: workers are for the ID card reader.
   {
@@ -27,6 +32,9 @@ const securityHeaders = [
       "upgrade-insecure-requests",
     ].join("; "),
   },
+];
+
+const otherHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   // Location and camera (ID photos) are used by the site itself; microphone and payments never.
@@ -39,7 +47,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
     return [
-      { source: "/:path*", headers: securityHeaders },
+      { source: "/:path*", headers: [...securityHeaders, ...otherHeaders] },
+      { source: "/:path((?!api/admin/(?:wa-media|id-docs)/).*)", headers: csp },
       // The ID card reader's files: versioned folder, so they can be cached for good.
       { source: "/ocr/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
     ];

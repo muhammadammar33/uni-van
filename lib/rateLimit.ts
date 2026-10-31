@@ -6,7 +6,7 @@ import { BookingError } from "@/lib/trips";
 
 /** The visitor's IP as Vercel reports it (it sets x-forwarded-for itself), hashed so it is never stored. */
 export function clientKey(h: Headers): string {
-  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "unknown";
+  const ip = (h.get("x-vercel-forwarded-for") || h.get("x-forwarded-for"))?.split(",")[0]?.trim() || h.get("x-real-ip") || "unknown";
   return createHash("sha256").update(`${process.env.AUTH_SECRET ?? ""}:${ip}`).digest("hex").slice(0, 24);
 }
 
@@ -56,8 +56,10 @@ export async function guardBookingCode<T>(h: Headers, slug: string, phone: strin
     ok = true;
     return result;
   } catch (err) {
-    // Only wrong codes count; other refusals (e.g. "already cancelled") give the try back.
-    if (!(err instanceof BookingError && err.status === 404)) ok = true;
+    // Only wrong codes count (a wrong booking code, or a wrong ride code in the car); other refusals
+    // (e.g. "already cancelled") give the try back.
+    const wrong = err instanceof BookingError && (err.status === 404 || err.extra?.code === "wrong_ride_code");
+    if (!wrong) ok = true;
     throw err;
   } finally {
     if (ok) await Promise.all([unbump(who), unbump(target)]);

@@ -47,12 +47,12 @@ export async function phoneFor(user: s.User | null, phoneRaw: unknown, token: un
     if (phone !== user.phone) throw new BookingError("Use the WhatsApp number on your account. To use another number, sign in with the Google account it belongs to.", 403);
     return phone;
   }
+  // A typed number is only trusted once WhatsApp has proved it's theirs. If checks are switched off, this
+  // stops (fail closed) rather than trusting it: it would show or change that number's rides and ID.
+  if (!verifyMode() && process.env.ALLOW_UNVERIFIED_PHONES !== "1")
+    throw new BookingError("Phone checks aren't working right now, so new numbers can't be added. Please try again later.", 503);
   await requireVerifiedPhone(token, phone);
   if (user) {
-    // A number is only linked to an account once WhatsApp has proved it's theirs. If checks are switched off,
-    // linking stops (fail closed) rather than trusting a typed number (it would show that number's rides).
-    if (!verifyMode() && process.env.ALLOW_UNVERIFIED_PHONES !== "1")
-      throw new BookingError("Phone checks aren't working right now, so new numbers can't be added. Please try again later.", 503);
     const db = requireDb();
     const [other] = await db
       .select({ id: s.users.id })

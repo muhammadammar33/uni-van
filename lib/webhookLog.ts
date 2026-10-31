@@ -1,6 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { requireDb, schema as s } from "@/lib/db";
+import { logError } from "@/lib/api";
 
 /**
  * The last WhatsApp webhook deliveries, for the admin to see why a number didn't verify.
@@ -21,7 +22,7 @@ export async function logWebhook(events: Omit<WebhookEvent, "at">[]) {
     const value = JSON.stringify([...events.map((e) => ({ at, ...e })), ...old].slice(0, 25));
     await db.insert(s.appSettings).values({ key: KEY, value }).onConflictDoUpdate({ target: s.appSettings.key, set: { value } });
   } catch (err) {
-    console.error("webhook log", err);
+    logError("webhook log", err);
   }
 }
 

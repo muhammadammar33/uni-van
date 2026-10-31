@@ -14,6 +14,6 @@ export async function GET() {
     ...rows.map((r) => [r.name, displayPhone(r.phone), r.gender === "female" ? "Female" : "Male", r.refNo, r.groupName, r.stop, r.active ? "Yes" : "No"]),
   ]);
   return new Response("﻿" + csv + "\n", {
-    headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="${slugify(org.name)}-riders.csv"` },
+    headers: { "content-type": "text/csv; charset=utf-8", "cache-control": "private, no-store", "content-disposition": `attachment; filename="${slugify(org.name)}-riders.csv"` },
   });
 }
