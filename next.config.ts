@@ -5,7 +5,28 @@ const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
   // Nobody may show the site inside a frame on their own page (clickjacking).
   { key: "X-Frame-Options", value: "DENY" },
-  { key: "Content-Security-Policy", value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'" },
+  // What pages may load: only this site, plus the map tiles (OpenStreetMap), place names for dropped pins
+  // (Nominatim) and Google profile pictures. 'wasm-unsafe-eval' and blob: workers are for the ID card reader.
+  {
+    key: "Content-Security-Policy",
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.googleusercontent.com",
+      "connect-src 'self' https://nominatim.openstreetmap.org",
+      "worker-src 'self' blob:",
+      "media-src 'self' blob:",
+      "font-src 'self'",
+      "manifest-src 'self'",
+      "frame-src 'none'",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "form-action 'self'",
+      "upgrade-insecure-requests",
+    ].join("; "),
+  },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   // Location and camera (ID photos) are used by the site itself; microphone and payments never.

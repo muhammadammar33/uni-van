@@ -17,9 +17,21 @@ export async function startSession(admin: { id: number; email: string; name: str
   });
 }
 
+/** Signs out: this browser, and every other session of this admin (a copied cookie stops working too). */
 export async function endSession() {
-  (await cookies()).delete(SESSION_COOKIE);
+  const jar = await cookies();
+  const session = await verifySession(jar.get(SESSION_COOKIE)?.value);
+  if (session && db) await revokeSessions(Number(session.sub));
+  jar.delete(SESSION_COOKIE);
 }
+
+/** Every session this admin started until now stops working (sign-out, password change). */
+export async function revokeSessions(adminId: number) {
+  if (db) await db.update(s.admins).set({ sessionsValidAfter: new Date() }).where(eq(s.admins.id, adminId));
+}
+
+/** A session issued before the admin's latest sign-out or password change is no longer valid. */
+const stillValid = (iat: number, validAfter: Date | null) => !validAfter || iat >= Math.floor(validAfter.getTime() / 1000);
 
 /** Which organisation a super admin is currently working in (organisation admins are fixed to their own). */
 export const ORG_COOKIE = "van_org";
@@ -29,14 +41,14 @@ export const requireAdmin = cache(async () => {
   const session = await verifySession((await cookies()).get(SESSION_COOKIE)?.value);
   if (!session || !db) redirect("/admin/login");
   const [row] = await db
-    .select({ id: s.admins.id, email: s.admins.email, name: s.admins.name, role: s.admins.role, orgId: s.admins.orgId, orgActive: s.organizations.active })
+    .select({ id: s.admins.id, email: s.admins.email, name: s.admins.name, role: s.admins.role, orgId: s.admins.orgId, orgActive: s.organizations.active, validAfter: s.admins.sessionsValidAfter })
     .from(s.admins)
     .leftJoin(s.organizations, eq(s.organizations.id, s.admins.orgId))
     .where(eq(s.admins.id, Number(session.sub)))
     .limit(1);
   // An organisation admin whose organisation was switched off is signed out.
-  if (!row || (row.role !== "super" && (!row.orgId || row.orgActive === false))) redirect("/admin/login");
-  const { orgActive: _active, ...admin } = row; // eslint-disable-line @typescript-eslint/no-unused-vars
+  if (!row || !stillValid(session.iat, row.validAfter) || (row.role !== "super" && (!row.orgId || row.orgActive === false))) redirect("/admin/login");
+  const { orgActive: _active, validAfter: _after, ...admin } = row; // eslint-disable-line @typescript-eslint/no-unused-vars
   return admin;
 });
 export type Admin = Awaited<ReturnType<typeof requireAdmin>>;
@@ -63,6 +75,10 @@ export const requireOrg = cache(async () => {
 export async function superAdminOrNull() {
   const session = await verifySession((await cookies()).get(SESSION_COOKIE)?.value);
   if (!session || !db) return null;
-  const [row] = await db.select({ id: s.admins.id, role: s.admins.role, email: s.admins.email }).from(s.admins).where(eq(s.admins.id, Number(session.sub))).limit(1);
-  return row?.role === "super" ? row : null;
+  const [row] = await db
+    .select({ id: s.admins.id, role: s.admins.role, email: s.admins.email, validAfter: s.admins.sessionsValidAfter })
+    .from(s.admins)
+    .where(eq(s.admins.id, Number(session.sub)))
+    .limit(1);
+  return row?.role === "super" && stillValid(session.iat, row.validAfter) ? { id: row.id, role: row.role, email: row.email } : null;
 }

@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash, randomBytes, randomInt } from "node:crypto";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { jwtVerify, SignJWT } from "jose";
 import { requireDb, schema as s } from "@/lib/db";
 import { displayPhone, normalizePhone } from "@/lib/format";
@@ -25,7 +25,8 @@ const hash = (id: string, code: string) => createHash("sha256").update(`${proces
 const key = () => {
   const secret = process.env.AUTH_SECRET;
   if (!secret || secret.length < 32) throw new Error("AUTH_SECRET must be set (32+ characters)");
-  return new TextEncoder().encode(secret);
+  // Its own key, different from admin and account sessions.
+  return new TextEncoder().encode(`phone-token:${secret}`);
 };
 
 /** Proof that this browser verified a phone number; kept by the browser for 90 days. */
@@ -56,8 +57,12 @@ export async function startVerification(phoneRaw: unknown, methodRaw: unknown, h
   if (!mode) return { required: false as const };
   const phone = normalizePhone(String(phoneRaw ?? ""));
   if (!phone) throw new BookingError("Enter a valid phone number, e.g. 0300 1234567");
+  // Pakistani mobile numbers only (so codes can't be sent, at our cost, to numbers anywhere in the world).
+  if (!/^923\d{9}$/.test(phone)) throw new BookingError("Enter a Pakistani mobile number, e.g. 0300 1234567");
   const method = methodRaw === "message" && mode.message ? "message" : mode.send ? "send" : "message";
   await take(`verify-ip:${clientKey(h)}`, 15, 3600, "Too many verification requests. Please try again in an hour.");
+  // Codes we send cost money: a cap for the whole site per day, whatever the number of visitors.
+  if (method === "send") await take(`verify-send-day`, 1000, 86400, "We can't send more codes today. Please try the other way (message us), or try tomorrow.");
   await take(`verify-phone:${phone}`, 5, 3600, "Too many codes for this number. Please try again in an hour.");
   const id = randomBytes(18).toString("base64url");
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
@@ -81,13 +86,18 @@ export async function checkCode(idRaw: unknown, codeRaw: unknown) {
   const id = String(idRaw ?? "");
   const code = String(codeRaw ?? "").replace(/\D/g, "");
   const db = requireDb();
-  const [row] = await db.select().from(s.phoneVerifications).where(eq(s.phoneVerifications.id, id));
-  if (!row || row.method !== "send" || row.expiresAt < new Date()) throw new BookingError("This code has expired. Ask for a new one.", 410);
-  if (row.attempts >= MAX_ATTEMPTS) throw new BookingError("Too many wrong tries. Ask for a new code.", 429);
-  if (row.verifiedAt) return { token: await phoneToken(row.phone) };
+  const [found] = await db.select().from(s.phoneVerifications).where(eq(s.phoneVerifications.id, id));
+  if (!found || found.method !== "send" || found.expiresAt < new Date()) throw new BookingError("This code has expired. Ask for a new one.", 410);
+  if (found.verifiedAt) return { token: await phoneToken(found.phone) };
+  // Each try is claimed in one step before comparing, so many tries sent at once can't get past the limit.
+  const [row] = await db
+    .update(s.phoneVerifications)
+    .set({ attempts: sql`${s.phoneVerifications.attempts} + 1` })
+    .where(and(eq(s.phoneVerifications.id, id), lt(s.phoneVerifications.attempts, MAX_ATTEMPTS)))
+    .returning();
+  if (!row) throw new BookingError("Too many wrong tries. Ask for a new code.", 429);
   if (hash(id, code) !== row.codeHash) {
-    await db.update(s.phoneVerifications).set({ attempts: sql`${s.phoneVerifications.attempts} + 1` }).where(eq(s.phoneVerifications.id, id));
-    throw new BookingError(row.attempts + 1 >= MAX_ATTEMPTS ? "Too many wrong tries. Ask for a new code." : "That code isn't right. Check WhatsApp and try again.", 400);
+    throw new BookingError(row.attempts >= MAX_ATTEMPTS ? "Too many wrong tries. Ask for a new code." : "That code isn't right. Check WhatsApp and try again.", 400);
   }
   await db.update(s.phoneVerifications).set({ verifiedAt: new Date() }).where(eq(s.phoneVerifications.id, id));
   return { token: await phoneToken(row.phone) };
@@ -122,7 +132,9 @@ export async function receivedMessage(from: string, text: string): Promise<"veri
     const other = others.find((p) => hash(p.id, code) === p.codeHash);
     if (!other) return "no_match";
     const shown = `0${other.phone.slice(2, 5)} ${other.phone.slice(5)}`;
-    await sendText(phone, `This code is for ${shown}. Please send it from the WhatsApp on ${shown}, or go back to Hamsafar and enter this number instead.`).catch(() => {});
+    // Never name the other number: a guessed code mustn't reveal whose it is.
+    void shown;
+    await sendText(phone, "This code is for a different number. Send it from the WhatsApp of the number you entered on Hamsafar, or enter this number there instead.").catch(() => {});
     return "wrong_number";
   }
   await db.update(s.phoneVerifications).set({ verifiedAt: new Date() }).where(eq(s.phoneVerifications.id, match.id));

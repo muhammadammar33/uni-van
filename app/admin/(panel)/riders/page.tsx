@@ -7,7 +7,7 @@ import { RiderForm, RiderImport } from "@/components/admin/RiderForms";
 import { GenderIcon } from "@/components/SeatMap";
 import { requireOrg } from "@/lib/auth";
 import { requireDb, schema as s } from "@/lib/db";
-import { displayPhone } from "@/lib/format";
+import { displayPhone, likeTerm } from "@/lib/format";
 import { orgInfo } from "@/lib/orgTypes";
 import { deleteRider, setRiderActive } from "../../actions";
 
@@ -31,11 +31,11 @@ export default async function RidersPage({ searchParams }: PageProps<"/admin/rid
     eq(s.riders.orgId, org.id),
     q
       ? or(
-          ilike(s.riders.name, `%${q}%`),
-          ilike(s.riders.refNo, `%${q}%`),
-          ilike(s.riders.groupName, `%${q}%`),
-          ilike(s.riders.stop, `%${q}%`),
-          digits.length >= 4 ? ilike(s.riders.phone, `%${digits.replace(/^0/, "")}%`) : undefined,
+          ilike(s.riders.name, likeTerm(q)),
+          ilike(s.riders.refNo, likeTerm(q)),
+          ilike(s.riders.groupName, likeTerm(q)),
+          ilike(s.riders.stop, likeTerm(q)),
+          digits.length >= 4 ? ilike(s.riders.phone, likeTerm(digits.replace(/^0/, ""))) : undefined,
         )
       : undefined,
   );

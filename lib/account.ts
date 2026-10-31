@@ -6,7 +6,7 @@ import { db, requireDb, schema as s } from "@/lib/db";
 import { normalizePhone, todayLocal } from "@/lib/format";
 import { BookingError } from "@/lib/trips";
 import { USER_COOKIE, readUserSession } from "@/lib/userSession";
-import { requireVerifiedPhone } from "@/lib/verify";
+import { requireVerifiedPhone, verifyMode } from "@/lib/verify";
 
 /**
  * Accounts for riders and drivers: Google sign-in. Until the Google keys are set (GOOGLE_CLIENT_ID and
@@ -49,6 +49,10 @@ export async function phoneFor(user: s.User | null, phoneRaw: unknown, token: un
   }
   await requireVerifiedPhone(token, phone);
   if (user) {
+    // A number is only linked to an account once WhatsApp has proved it's theirs. If checks are switched off,
+    // linking stops (fail closed) rather than trusting a typed number (it would show that number's rides).
+    if (!verifyMode() && process.env.ALLOW_UNVERIFIED_PHONES !== "1")
+      throw new BookingError("Phone checks aren't working right now, so new numbers can't be added. Please try again later.", 503);
     const db = requireDb();
     const [other] = await db
       .select({ id: s.users.id })

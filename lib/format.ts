@@ -85,3 +85,6 @@ export function formatDateRange(start: string, end: string | null, long = false)
 export function formatFare(rupees: number): string {
   return `Rs. ${rupees.toLocaleString("en-US")}`;
 }
+
+/** A search term for SQL LIKE/ILIKE: % and _ typed by someone are matched literally, not as wildcards. */
+export const likeTerm = (q: string) => `%${q.trim().slice(0, 80).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;

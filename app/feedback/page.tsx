@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { safeNext } from "@/lib/userSession";
 import { ArrowLeft } from "lucide-react";
 import { FeedbackForm } from "@/components/carpool/FeedbackForm";
 import { Logo } from "@/components/Logo";
@@ -13,8 +14,8 @@ const pick = <T extends string>(v: unknown, options: readonly T[]): T | undefine
 
 export default async function FeedbackPage({ searchParams }: PageProps<"/feedback">) {
   const sp = await searchParams;
-  // Only paths on this site: "//other.site" or "/\\other.site" would leave it.
-  const from = typeof sp.from === "string" && /^\/(?![/\\])/.test(sp.from) ? sp.from : "/";
+  // Only paths on this site (see safeNext).
+  const from = safeNext(sp.from);
   return (
     <div className="min-h-dvh pb-16">
       <header className="bg-hero px-4 pb-16 pt-4 text-white">

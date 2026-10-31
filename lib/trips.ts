@@ -227,7 +227,7 @@ export async function bookSeat(where: { slug: string } | { id: number }, raw: un
     if (mine.length) {
       const labels = mine.map((b) => findSeat(trip.layout, b.seatId)?.label ?? b.seatId).join(", ");
       throw new BookingError(
-        `This phone number already has seat${mine.length > 1 ? "s" : ""} ${labels} on this trip. Cancel that booking first to change seats.`,
+        "This phone number already has seats on this trip. Cancel that booking first to change seats.",
         409,
       );
     }
@@ -307,7 +307,8 @@ export type DriverPassenger = {
 export async function driverTrip(token: string) {
   if (!token || token.length < 16) return null;
   const data = await loadTrip({ driverToken: token });
-  if (!data) return null;
+  // A switched-off organisation's driver links stop working too.
+  if (!data || !data.org.active) return null;
   const { trip, org, stops, bookings } = data;
   const passenger = (b: s.Booking): DriverPassenger => ({
     id: b.id,

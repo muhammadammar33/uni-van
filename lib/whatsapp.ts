@@ -25,7 +25,8 @@ async function post(body: unknown) {
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    console.error("WhatsApp API error", res.status, detail.slice(0, 500));
+    // Phone numbers in Meta's error text are masked.
+    console.error("WhatsApp API error", res.status, detail.slice(0, 300).replace(/\d{6,}/g, (d) => `…${d.slice(-3)}`));
     throw new Error("whatsapp_send_failed");
   }
 }

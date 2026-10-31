@@ -43,8 +43,18 @@ export async function readOAuthState(token: string | undefined): Promise<OAuthSt
   }
 }
 
-/** Only paths on this site (never another site, which would make sign-in an open redirect). */
+/**
+ * Only paths on this site (never another site, which would make sign-in an open redirect). Browsers drop tabs
+ * and line breaks inside addresses ("/\t/evil.com" means "//evil.com"), so those are removed first, and the
+ * result must resolve to this site.
+ */
 export function safeNext(next: unknown): string {
-  const n = typeof next === "string" ? next : "";
-  return n.startsWith("/") && !n.startsWith("//") && !n.startsWith("/\\") && !n.startsWith("/api/auth") ? n.slice(0, 500) : "/";
+  const n = (typeof next === "string" ? next : "").replace(/[\u0000-\u001F\u007F\s]/g, "").replace(/\\/g, "/");
+  if (!n.startsWith("/") || n.startsWith("//") || n.startsWith("/api/auth")) return "/";
+  try {
+    const u = new URL(n, "https://x.invalid");
+    return u.origin === "https://x.invalid" ? (u.pathname + u.search + u.hash).slice(0, 500) : "/";
+  } catch {
+    return "/";
+  }
 }

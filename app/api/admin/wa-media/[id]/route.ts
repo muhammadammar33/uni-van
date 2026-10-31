@@ -13,7 +13,8 @@ export async function GET(req: Request, ctx: RouteContext<"/api/admin/wa-media/[
     headers: {
       "content-type": file.mime,
       "content-length": String(file.bytes.length),
-      "cache-control": "private, max-age=86400",
+      // Private: never kept in the browser's cache on disk.
+      "cache-control": "private, no-store",
       "x-content-type-options": "nosniff",
       // Never run uploaded files as a page on this site.
       "content-security-policy": "default-src 'none'; media-src 'self'; img-src 'self'; style-src 'unsafe-inline'; sandbox",

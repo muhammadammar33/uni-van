@@ -1,16 +1,25 @@
+import { timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { saveIncoming, saveStatus, type Incoming } from "@/lib/waInbox";
 import { receivedMessage } from "@/lib/verify";
 import { validSignature, waConfig } from "@/lib/whatsapp";
 import { logWebhook, maskPhone } from "@/lib/webhookLog";
+import { bump } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
+
+/** Compares secrets in constant time. */
+function sameText(a: string, b: string) {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
 
 /** Meta checks the webhook once when you add it: echo the challenge if the verify token matches. */
 export async function GET(req: Request) {
   const u = new URL(req.url).searchParams;
   const { verifyToken } = waConfig();
-  if (verifyToken && u.get("hub.mode") === "subscribe" && u.get("hub.verify_token") === verifyToken) return new NextResponse(u.get("hub.challenge") ?? "", { status: 200 });
+  if (verifyToken && u.get("hub.mode") === "subscribe" && sameText(u.get("hub.verify_token") ?? "", verifyToken)) return new NextResponse(u.get("hub.challenge") ?? "", { status: 200 });
   return new NextResponse("Forbidden", { status: 403 });
 }
 
@@ -34,7 +43,8 @@ export async function POST(req: Request) {
   const raw = await req.text();
   if (!validSignature(raw, req.headers.get("x-hub-signature-256"))) {
     // Signed but wrong: the App secret in the settings doesn't match the app's (unsigned posts aren't logged).
-    if (req.headers.get("x-hub-signature-256")) await logWebhook([{ result: "bad_signature: check WHATSAPP_APP_SECRET" }]);
+    // (At most a few log lines an hour, so forged requests can't flood the log.)
+    if (req.headers.get("x-hub-signature-256") && (await bump("wa-badsig-log", 3600)) <= 5) await logWebhook([{ result: "bad_signature: check WHATSAPP_APP_SECRET" }]);
     return new NextResponse("Bad signature", { status: 401 });
   }
   let body: Payload = {};

@@ -1,7 +1,7 @@
 import "server-only";
 import { and, desc, eq, ilike, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { requireDb, schema as s } from "@/lib/db";
-import { normalizePhone } from "@/lib/format";
+import { likeTerm, normalizePhone } from "@/lib/format";
 import { BookingError } from "@/lib/trips";
 
 /** Admin: the people who signed in (riders and drivers), and blocking them. */
@@ -13,7 +13,7 @@ export async function listPeople(q: string, show: "all" | "blocked") {
   const phone = digits.length >= 4 ? (normalizePhone(term) ?? digits.replace(/^0/, "")) : null;
   const where = and(
     show === "blocked" ? isNotNull(s.users.blockedAt) : undefined,
-    term ? or(ilike(s.users.name, `%${term}%`), ilike(s.users.email, `%${term}%`), phone ? ilike(s.users.phone, `%${phone}%`) : undefined) : undefined,
+    term ? or(ilike(s.users.name, likeTerm(term)), ilike(s.users.email, likeTerm(term)), phone ? ilike(s.users.phone, likeTerm(phone)) : undefined) : undefined,
   );
   const people = await db.select().from(s.users).where(where).orderBy(desc(s.users.lastSeenAt)).limit(100);
   const ids = people.map((p) => p.id);
@@ -88,6 +88,16 @@ export async function blockPerson(id: number, adminId: number, reason: string) {
 /** Lets them back in. Their paused rides stay paused until they resume them. */
 export async function unblockPerson(id: number) {
   await requireDb().update(s.users).set({ blockedAt: null, blockReason: null, blockedBy: null }).where(eq(s.users.id, id));
+}
+
+/** Whether this number belongs to a blocked account. */
+export async function isPhoneBlocked(phone: string) {
+  const [u] = await requireDb()
+    .select({ id: s.users.id })
+    .from(s.users)
+    .where(and(eq(s.users.phone, phone), isNotNull(s.users.blockedAt)))
+    .limit(1);
+  return !!u;
 }
 
 /** For ride actions done with a private ride link (no sign-in): a blocked person's number can't be used. */

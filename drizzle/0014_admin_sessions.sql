@@ -1,0 +1,1 @@
+ALTER TABLE "admins" ADD COLUMN "sessions_valid_after" timestamp with time zone;

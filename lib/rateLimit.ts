@@ -41,17 +41,30 @@ const HOUR = 3600;
 /**
  * Wraps lookups that need a phone + booking code (see / cancel / rate a booking): after a few wrong codes for
  * the same booking, or many from one visitor, further tries are refused for an hour. Codes are 4 characters,
- * so without this they could be guessed.
+ * so without this they could be guessed. Each try is counted before it runs (so requests sent all at once
+ * can't slip past the limit), and given back when it turns out right.
  */
 export async function guardBookingCode<T>(h: Headers, slug: string, phone: string, fn: () => Promise<T>): Promise<T> {
   const who = `code-ip:${clientKey(h)}`;
   const target = `code:${slug}:${phone.replace(/\D/g, "").slice(-10)}`;
   const tooMany = "Too many wrong tries. Please wait an hour, or ask the driver to look up your booking.";
-  if ((await isLimited(who, CODE_TRIES_PER_IP)) || (await isLimited(target, CODE_TRIES))) throw new BookingError(tooMany, 429);
+  const [a, b] = await Promise.all([bump(who, HOUR), bump(target, HOUR)]);
+  if (a > CODE_TRIES_PER_IP || b > CODE_TRIES) throw new BookingError(tooMany, 429);
+  let ok = false;
   try {
-    return await fn();
+    const result = await fn();
+    ok = true;
+    return result;
   } catch (err) {
-    if (err instanceof BookingError && err.status === 404) await Promise.all([bump(who, HOUR), bump(target, HOUR)]);
+    // Only wrong codes count; other refusals (e.g. "already cancelled") give the try back.
+    if (!(err instanceof BookingError && err.status === 404)) ok = true;
     throw err;
+  } finally {
+    if (ok) await Promise.all([unbump(who), unbump(target)]);
   }
+}
+
+/** Gives back one counted try (a right code, or a refusal that wasn't a wrong guess). */
+async function unbump(key: string) {
+  await requireDb().execute(sql`update rate_limits set count = greatest(count - 1, 0) where key = ${key}`);
 }

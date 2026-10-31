@@ -4,17 +4,22 @@ import { and, gte, inArray, sql } from "drizzle-orm";
 import { requireDb, schema as s } from "@/lib/db";
 import { addDays } from "@/lib/schedule";
 import { todayLocal } from "@/lib/format";
+import { bump as bumpLimit } from "@/lib/rateLimit";
 
 /* ---------- Counting (privacy-friendly: daily totals and a one-way visitor code, never an IP address) ---------- */
 
 const BOT = /bot|crawl|spider|slurp|preview|facebookexternalhit|whatsapp|headless|lighthouse/i;
 
-/** Which section a page belongs to ("/r/abc123" → "/r"), so counts don't grow with every ride link. */
-export function section(path: string) {
+/**
+ * Which section a page belongs to ("/r/abc123" → "/r"), so counts don't grow with every ride link. Only the
+ * site's real sections are counted: made-up paths can't fill the table.
+ */
+export function section(path: string): string | null {
   const p = path.split("?")[0];
   if (p === "/") return "/";
-  if (p.startsWith("/r/manage")) return "/r/manage";
-  return `/${p.split("/")[1] ?? ""}`.slice(0, 40);
+  if (p.startsWith("/r/manage/")) return "/r/manage";
+  const top = `/${p.split("/")[1] ?? ""}`;
+  return Object.hasOwn(PAGE_NAMES, top) ? top : null;
 }
 
 async function bump(day: string, metric: string, key: string) {
@@ -27,15 +32,21 @@ async function bump(day: string, metric: string, key: string) {
 /** A page view from the browser. Admin pages and bots aren't counted. */
 export async function trackView(path: string, h: Headers) {
   const ua = h.get("user-agent") ?? "";
-  if (!path.startsWith("/") || path.startsWith("/admin") || path.startsWith("/api") || BOT.test(ua)) return;
-  const day = todayLocal();
+  const sec = section(path);
+  if (!sec || BOT.test(ua)) return;
   const ip = (h.get("x-forwarded-for") ?? "").split(",")[0].trim() || h.get("x-real-ip") || "";
+  // A visitor can only add so much: stops a script from inflating the numbers or the table.
+  if ((await bumpLimit(`track:${createHash("sha256").update(ip).digest("base64url").slice(0, 16)}`, 3600)) > 300) return;
+  const day = todayLocal();
   // Changes every day and can't be turned back into the address.
   const hash = createHash("sha256").update(`${day}|${ip}|${ua}|${process.env.AUTH_SECRET ?? ""}`).digest("base64url").slice(0, 22);
-  await Promise.all([bump(day, "view", section(path)), requireDb().insert(s.visitorDays).values({ day, hash }).onConflictDoNothing()]);
+  await Promise.all([bump(day, "view", sec), requireDb().insert(s.visitorDays).values({ day, hash }).onConflictDoNothing()]);
 }
 
-/** A search for a route (both ends chosen), and whether it found nothing: that's demand without rides. */
+/**
+ * A search for a route (both ends from the places list), and whether it found nothing: that's demand without
+ * rides. Dropped pins aren't recorded by name, so nobody can write their own text into the dashboard.
+ */
 export async function trackSearch(from: string, to: string, kind: string, found: number) {
   const day = todayLocal();
   const key = `${from} → ${to}${kind === "intercity" ? " (intercity)" : ""}`;

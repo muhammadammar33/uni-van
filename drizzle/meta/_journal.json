@@ -99,6 +99,13 @@
       "when": 1793449011220,
       "tag": "0013_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793451700785,
+      "tag": "0014_admin_sessions",
+      "breakpoints": true
     }
   ]
 }

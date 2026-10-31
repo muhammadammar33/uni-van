@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assertSameOrigin } from "@/lib/api";
 import { superAdminOrNull } from "@/lib/auth";
 import { savePushSubscription, vapidKeys } from "@/lib/notify";
 
@@ -12,6 +13,7 @@ export async function POST(req: Request) {
   const admin = await superAdminOrNull();
   if (!admin) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   try {
+    assertSameOrigin(req);
     await savePushSubscription(admin.id, await req.json());
     return NextResponse.json({ ok: true });
   } catch {

@@ -25,7 +25,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   const kind = kindFor(str("kind"), from, to);
   const rides = await searchRides(from, to, date, kind);
   // For the owner's analytics: which routes people look for, and which found nothing.
-  if (from && to) after(() => trackSearch(from.name, to.name, kind, rides.length).catch(() => {}));
+  if (from?.key && to?.key) after(() => trackSearch(from.name, to.name, kind, rides.length).catch(() => {}));
   const keep = (r: { pickupIdx: number; dropIdx: number }) => {
     const q = new URLSearchParams();
     if (date) q.set("date", date);

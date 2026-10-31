@@ -6,9 +6,10 @@ import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
-import { endSession, ORG_COOKIE, requireAdmin, requireOrg, requireSuper, startSession } from "@/lib/auth";
+import { endSession, ORG_COOKIE, requireAdmin, requireOrg, requireSuper, revokeSessions, startSession } from "@/lib/auth";
 import { db, requireDb, schema as s } from "@/lib/db";
 import { defaultTitle, normalizePhone } from "@/lib/format";
+import { safeNext } from "@/lib/userSession";
 import { busLayout, GENDERS, hiaceLayout, layoutConflicts, MAX_FARE, parseLayout, type Layout } from "@/lib/layout";
 import { ORG_TYPES, orgInfo, slugify } from "@/lib/orgTypes";
 import { bump, clientKey, isLimited } from "@/lib/rateLimit";
@@ -56,8 +57,9 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
   // Slow down password guessing: 10 wrong tries per connection, or 20 per account, then wait 15 minutes.
   const byIp = `login-ip:${clientKey(await headers())}`;
   const byEmail = `login-email:${email}`;
-  if ((await isLimited(byIp, 10)) || (await isLimited(byEmail, 20)))
-    return { error: "Too many wrong tries. Please wait 15 minutes and try again." };
+  // Each try is counted before checking (so many at once can't slip past), and given back when it's right.
+  const [ipTries, emailTries] = await Promise.all([bump(byIp, LOGIN_WINDOW), bump(byEmail, LOGIN_WINDOW)]);
+  if (ipTries > 10 || emailTries > 20) return { error: "Too many wrong tries. Please wait 15 minutes and try again." };
   const [row] = await db
     .select({ admin: s.admins, orgActive: s.organizations.active })
     .from(s.admins)
@@ -65,13 +67,11 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
     .where(eq(s.admins.email, email))
     .limit(1);
   const valid = await bcrypt.compare(password, row?.admin.passwordHash ?? DUMMY_HASH);
-  if (!row || !valid) {
-    await Promise.all([bump(byIp, LOGIN_WINDOW), bump(byEmail, LOGIN_WINDOW)]);
-    return { error: "Wrong email or password." };
-  }
+  if (!row || !valid) return { error: "Wrong email or password." };
+  await requireDb().execute(sql`update rate_limits set count = greatest(count - 1, 0) where key in (${byIp}, ${byEmail})`);
   if (row.admin.role !== "super" && row.orgActive === false) return { error: "This account is switched off. Contact Hamsafar support." };
   await startSession(row.admin);
-  const next = String(form.get("next") ?? "");
+  const next = safeNext(form.get("next"));
   // Super admins start from the organisations list (they pick one to work in).
   redirect(next.startsWith("/admin") ? next : row.admin.role === "super" ? "/admin/orgs" : "/admin");
 }
@@ -90,6 +90,9 @@ export async function changePassword(_: FormState, form: FormData): Promise<Form
   const [row] = await requireDb().select().from(s.admins).where(eq(s.admins.id, me.id));
   if (!row || !(await bcrypt.compare(current, row.passwordHash))) return { error: "Current password is wrong." };
   await requireDb().update(s.admins).set({ passwordHash: await bcrypt.hash(next, 12) }).where(eq(s.admins.id, me.id));
+  // Every other session (other devices, a copied cookie) stops working; this one continues with a fresh session.
+  await revokeSessions(me.id);
+  await startSession(me);
   return { ok: "Password changed." };
 }
 

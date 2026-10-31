@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+// No eval-based speed-ups: the site's security policy forbids eval in browsers, so zod mustn't even try it.
+z.config({ jitless: true });
+
 /**
  * A vehicle is a grid seen from above, front of the vehicle at row 0.
  * Seats sitting directly side by side in the same row (no aisle/empty cell between them) are neighbours,

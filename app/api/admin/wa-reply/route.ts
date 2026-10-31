@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assertSameOrigin } from "@/lib/api";
 import { superAdminOrNull } from "@/lib/auth";
 import { reply } from "@/lib/waInbox";
 
@@ -7,6 +8,7 @@ export async function POST(req: Request) {
   const admin = await superAdminOrNull();
   if (!admin) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   try {
+    assertSameOrigin(req);
     const fd = await req.formData();
     const file = fd.get("file");
     await reply(String(fd.get("waId") ?? ""), admin.id, String(fd.get("text") ?? ""), file instanceof File && file.size > 0 ? file : null);

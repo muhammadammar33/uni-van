@@ -102,6 +102,14 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
+/** A cell starting with = + - @ (or a tab/CR) would run as a formula in Excel or Sheets: prefix it with ' so it's text. */
+const cell = (v: string | number | null) => {
+  if (v === null) return "";
+  let t = String(v);
+  if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
+  return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+};
+
 export function toCsv(rows: (string | number | null)[][]): string {
-  return rows.map((r) => r.map((v) => (v === null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v))).join(",")).join("\n");
+  return rows.map((r) => r.map(cell).join(",")).join("\n");
 }

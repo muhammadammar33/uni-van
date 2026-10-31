@@ -10,7 +10,7 @@ import { GENDERS } from "@/lib/layout";
 import { BookingError } from "@/lib/trips";
 import { driverGate, identityByPhone, riderGate, verifiedDrivers } from "@/lib/identity";
 import { phoneFor } from "@/lib/account";
-import { assertPhoneNotBlocked } from "@/lib/people";
+import { assertPhoneNotBlocked, isPhoneBlocked } from "@/lib/people";
 import { nextRuns, runOver, runsOn, type Schedule } from "@/lib/schedule";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -413,7 +413,7 @@ export async function bookRide(slug: string, raw: unknown, user: s.User | null):
   const input = parsed.data;
   const phone = await phoneFor(user, input.phone, tokenOf(raw));
   // Riders need an ID on file; their gender comes from it (that's what women-only rides check).
-  const { gender } = await riderGate(phone);
+  const { gender, approved } = await riderGate(phone);
   input.gender = gender;
   return requireDb().transaction(async (tx) => {
     const locked = await tx.execute<{ id: number }>(sql`select id from rides where slug = ${slug} for update`);
@@ -426,6 +426,8 @@ export async function bookRide(slug: string, raw: unknown, user: s.User | null):
       );
     if (!upcomingRuns(r, 60).includes(input.date)) throw new BookingError("The ride doesn't run on that day, or it has already left.", 409);
     if (r.riders !== "anyone" && r.riders !== input.gender) throw new BookingError(`This ride is for ${r.riders === "female" ? "women" : "men"} only.`, 409);
+    if (r.riders !== "anyone" && !approved)
+      throw new BookingError(`${r.riders === "female" ? "Women" : "Men"}-only rides can be booked once your ID is approved (usually within 24 hours).`, 403);
     if (phone === r.driverPhone) throw new BookingError("That's the driver's own number.");
     const pts = await tx.select().from(s.ridePoints).where(eq(s.ridePoints.rideId, r.id)).orderBy(asc(s.ridePoints.idx));
     if (input.pickupIdx >= pts.length || input.dropIdx >= pts.length || input.dropIdx <= input.pickupIdx) throw new BookingError("Choose where you get on and off");
@@ -535,6 +537,7 @@ export async function tripAction(token: string, raw: unknown) {
   return requireDb().transaction(async (tx) => {
     const [r] = await tx.select().from(s.rides).where(eq(s.rides.manageToken, token)).for("update");
     if (!r) throw new BookingError("Ride not found", 404);
+    await assertPhoneNotBlocked(r.driverPhone);
     if (r.status !== "active") throw new BookingError("This ride isn't live.", 409);
     if (!runsOn(scheduleOf(r), date)) throw new BookingError("This ride doesn't run today.", 409);
     const today = await tx
@@ -612,6 +615,8 @@ export async function manageRide(token: string) {
   const db = requireDb();
   const [r] = await db.select().from(s.rides).where(eq(s.rides.manageToken, token)).limit(1);
   if (!r) return null;
+  // A blocked driver's private link shows nothing (it would show their riders' numbers).
+  if (await isPhoneBlocked(r.driverPhone)) return null;
   const [pts, bookings] = await Promise.all([
     pointsFor([r.id]),
     db
@@ -659,8 +664,9 @@ export async function manageRide(token: string) {
 export type ManageData = NonNullable<Awaited<ReturnType<typeof manageRide>>>;
 
 export async function removeRideBooking(token: string, bookingId: number) {
-  const [r] = await requireDb().select({ id: s.rides.id }).from(s.rides).where(eq(s.rides.manageToken, token));
+  const [r] = await requireDb().select({ id: s.rides.id, driverPhone: s.rides.driverPhone }).from(s.rides).where(eq(s.rides.manageToken, token));
   if (!r) throw new BookingError("Ride not found", 404);
+  await assertPhoneNotBlocked(r.driverPhone);
   await requireDb()
     .delete(s.rideBookings)
     .where(and(eq(s.rideBookings.id, bookingId), eq(s.rideBookings.rideId, r.id)));
@@ -713,6 +719,8 @@ export async function livePositions(rideSlug?: string) {
     .from(s.livePositions)
     .leftJoin(s.rides, eq(s.rides.id, s.livePositions.rideId))
     .where(rideSlug ? and(fresh, eq(s.rides.slug, rideSlug)) : and(fresh, sql`(${s.livePositions.role} = 'rider' or ${s.rides.status} <> 'cancelled')`))
+    // Drivers first and newest first, so a flood of rider dots can never push drivers off the map.
+    .orderBy(sql`case when ${s.livePositions.role} = 'driver' then 0 else 1 end`, desc(s.livePositions.updatedAt))
     .limit(500);
   const rideIds = [...new Set(rows.flatMap((r) => (r.p.rideId ? [r.p.rideId] : [])))];
   const pts = await pointsFor(rideIds);

@@ -35,6 +35,8 @@ export const admins = pgTable("admins", {
   /** super: runs the platform and every organisation. admin: runs one organisation. */
   role: adminRoleEnum("role").default("admin").notNull(),
   orgId: integer("org_id").references(() => organizations.id, { onDelete: "cascade" }),
+  /** Sessions started before this are no longer valid (set on sign-out and password change). */
+  sessionsValidAfter: timestamp("sessions_valid_after", { withTimezone: true }),
   createdAt,
 });
 

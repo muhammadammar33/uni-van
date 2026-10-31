@@ -1,4 +1,5 @@
 import { handle, readJson } from "@/lib/api";
+import { clientKey, take } from "@/lib/rateLimit";
 import { livePositions, shareLive, stopLive } from "@/lib/rides";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,10 @@ export async function GET(req: Request) {
 /** Share or update my position. */
 export async function POST(req: Request) {
   return handle(async () => {
-    await shareLive(await readJson(req));
+    const body = await readJson(req);
+    // Riders appear without signing in, so a cap per visitor keeps fake dots off the map. Drivers need their ride link.
+    if (body.role !== "driver") await take(`live-ip:${clientKey(req.headers)}`, 240, 3600, "Too many location updates. Please try again later.");
+    await shareLive(body);
     return { ok: true };
   });
 }

@@ -3,7 +3,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireDb, schema as s } from "@/lib/db";
-import { normalizePhone, todayLocal } from "@/lib/format";
+import { normalizePhone, todayLocal, likeTerm } from "@/lib/format";
 import { checkId, cleanIdNumber, LICENSE_AUTHORITIES } from "@/lib/identityRules";
 import { clientKey, take } from "@/lib/rateLimit";
 import { BookingError } from "@/lib/trips";
@@ -65,7 +65,19 @@ export const identityInput = z.object({
   consent: z.literal(true, "Please agree to the ID check to continue."),
   /** What the card scan read, to compare with what was typed. */
   scanned: z.object({ idNumber: z.string().max(20).nullish(), name: z.string().max(80).nullish() }).optional(),
-  photos: z.record(z.string(), z.string().max(3_000_000)).default({}),
+  // Only the known photos, each a few MB at most (no extra keys to inflate the request).
+  photos: z
+    .object({
+      cnic_front: z.string().max(3_000_000).optional(),
+      cnic_back: z.string().max(3_000_000).optional(),
+      selfie: z.string().max(3_000_000).optional(),
+      license: z.string().max(3_000_000).optional(),
+      bform: z.string().max(3_000_000).optional(),
+      guardian_front: z.string().max(3_000_000).optional(),
+      guardian_back: z.string().max(3_000_000).optional(),
+    })
+    .strict()
+    .default({}),
 });
 
 const PHOTO_LABEL = {
@@ -130,7 +142,7 @@ export async function submitIdentity(raw: unknown, h: Headers, user: s.User | nu
   const driverFields = () => {
     if (f.mode !== "driver") return {};
     if (license.number.length < 4) throw new BookingError("Enter your driving licence number.");
-    if (!(license.authority in LICENSE_AUTHORITIES)) throw new BookingError("Choose where your licence was issued.");
+    if (!Object.hasOwn(LICENSE_AUTHORITIES, license.authority)) throw new BookingError("Choose where your licence was issued.");
     const reg = f.vehicleReg.toUpperCase().replace(/\s+/g, " ");
     if (reg.replace(/[^A-Z0-9]/g, "").length < 3) throw new BookingError("Enter your car's registration number, e.g. LEA-2207.");
     return { licenseNumber: license.number.toUpperCase(), licenseExpiry: license.expiry, licenseAuthority: license.authority, vehicleReg: reg };
@@ -161,6 +173,9 @@ export async function submitIdentity(raw: unknown, h: Headers, user: s.User | nu
   if (existing && existing.riderStatus === "approved" && (f.mode === "rider" || existing.driverStatus === "approved"))
     throw new BookingError("Your ID is already verified.", 409);
   if (!f.gender) throw new BookingError("Choose male or female.");
+  // Once an ID is approved its gender stays (women-only rides rely on it); a mistake is corrected by the team.
+  if (existing && (existing.riderStatus === "approved" || existing.driverStatus === "approved") && f.gender !== existing.gender)
+    throw new BookingError("Your gender can't be changed here. Contact us through Feedback if it's wrong.", 409);
   if (f.fullName.length < 3) throw new BookingError("Enter your full name as on your ID.");
   const idNumber = cleanIdNumber(f.idNumber);
   const { errors, warnings } = checkId(
@@ -244,7 +259,8 @@ export async function riderGate(phone: string) {
     if (i?.riderStatus === "rejected") throw idError(st, "rider", `Your ID wasn't approved: ${i.rejectReason ?? "please send it again"}.`, "id_rejected");
     throw idError(st, "rider", "Verify your ID once to book rides.", "id_required");
   }
-  return { gender: i.gender };
+  // Women-only and men-only rides trust the gender on the ID, so it must be checked (approved), not just sent.
+  return { gender: i.gender, approved: i.riderStatus === "approved" || i.driverStatus === "approved" };
 }
 
 /** Which of these driver phones are ID-verified (for the "ID verified" badge). */
@@ -312,7 +328,7 @@ export async function identityDetail(id: number) {
 export async function searchIdentities(q: string) {
   const digits = q.replace(/\D/g, "");
   const phone = normalizePhone(q);
-  const conds = [sql`${s.identities.fullName} ilike ${"%" + q.trim() + "%"}`];
+  const conds = [sql`${s.identities.fullName} ilike ${likeTerm(q)}`];
   if (digits.length >= 5) conds.push(sql`${s.identities.idNumber} like ${digits + "%"}`, sql`${s.identities.guardianCnic} like ${digits + "%"}`);
   if (phone) conds.push(eq(s.identities.phone, phone));
   return requireDb()
