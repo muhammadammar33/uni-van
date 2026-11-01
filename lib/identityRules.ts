@@ -26,9 +26,9 @@ const ymd = /^\d{4}-\d{2}-\d{2}$/;
 export const isDate = (s: unknown): s is string => typeof s === "string" && ymd.test(s) && !Number.isNaN(Date.parse(s));
 
 export const LICENSE_AUTHORITIES = {
-  islamabad: { name: "Islamabad (ICT)", check: "https://islamabadpolice.gov.pk/" },
+  islamabad: { name: "Islamabad (ICT)", check: "https://dlims.islamabadpolice.gov.pk/" },
   punjab: { name: "Punjab", check: "https://dlims.punjab.gov.pk/verify" },
-  sindh: { name: "Sindh", check: "https://dls.gos.pk/online-verification.html" },
+  sindh: { name: "Sindh", check: "https://dls.gos.pk/" },
   kp: { name: "Khyber Pakhtunkhwa", check: "https://dlims.kp.gov.pk/" },
   balochistan: { name: "Balochistan", check: null },
   ajk: { name: "Azad Kashmir", check: null },

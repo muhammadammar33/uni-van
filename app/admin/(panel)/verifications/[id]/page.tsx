@@ -9,6 +9,7 @@ import { displayPhone, formatDate, formatTime } from "@/lib/format";
 import { identityDetail } from "@/lib/identity";
 import { ageOn, formatIdNumber, LICENSE_AUTHORITIES, VEHICLE_CHECKS, type LicenseAuthority } from "@/lib/identityRules";
 import { todayLocal } from "@/lib/format";
+import { CopyOpen, CopyValue } from "@/components/admin/CopyOpen";
 
 export const metadata = { title: "Check ID", referrer: "no-referrer" };
 
@@ -119,21 +120,29 @@ export default async function VerificationDetail({ params, searchParams }: PageP
           {i.driverStatus !== "none" && (
             <section className="card space-y-2 !p-4 text-sm">
               <h2 className="font-bold">Check on official sites</h2>
-              {auth?.check ? (
-                <a href={auth.check} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 font-semibold text-brand hover:underline">
-                  <ExternalLink className="size-4" /> Licence: {auth.name}
-                </a>
+              <p className="text-xs text-slate-500">These sites can&apos;t be filled in from here: each link copies the number, so you just paste it.</p>
+              {auth?.check && i.licenseNumber ? (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-slate-500">Licence</span>
+                  <CopyValue value={i.licenseNumber} />
+                  <CopyOpen href={auth.check} value={i.licenseNumber}>
+                    <ExternalLink className="size-4" /> {auth.name}
+                  </CopyOpen>
+                </div>
               ) : (
                 <p className="text-slate-500">Licence: check with the {auth?.name ?? "issuing"} licensing office.</p>
               )}
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                <span className="text-slate-500">Car {i.vehicleReg}:</span>
-                {VEHICLE_CHECKS.map((v) => (
-                  <a key={v.url} href={v.url} target="_blank" rel="noreferrer" className="font-semibold text-brand hover:underline">
-                    {v.name}
-                  </a>
-                ))}
-              </div>
+              {i.vehicleReg && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="text-slate-500">Car</span>
+                  <CopyValue value={i.vehicleReg} />
+                  {VEHICLE_CHECKS.map((v) => (
+                    <CopyOpen key={v.url} href={v.url} value={i.vehicleReg!}>
+                      {v.name}
+                    </CopyOpen>
+                  ))}
+                </div>
+              )}
               <p className="text-xs text-slate-500">NADRA: the CNIC check connects here once you have NADRA Verisys or a KYC provider.</p>
             </section>
           )}
