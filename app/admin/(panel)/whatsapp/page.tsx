@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Settings2 } from "lucide-react";
 import { PushOptIn } from "@/components/admin/PushOptIn";
-import { AutoRefresh } from "@/components/admin/WaInbox";
+import { AutoRefresh, NewChat } from "@/components/admin/WaInbox";
 import { requireSuper } from "@/lib/auth";
 import { conversations, preview } from "@/lib/waInbox";
 import { waConfig } from "@/lib/whatsapp";
@@ -32,6 +32,9 @@ export default async function WhatsAppInboxPage() {
         </Link>
       </div>
       <p className="mt-1 text-sm text-slate-600">Messages, photos and voice notes sent to {number ? `+${number}` : "the Hamsafar number"}. Verification codes aren&apos;t shown here.</p>
+      <div className="card mt-4 !p-3">
+        <NewChat />
+      </div>
       <div className="mt-4">
         <PushOptIn title="Get notified of new messages and IDs" />
       </div>

@@ -398,6 +398,8 @@ export const identities = pgTable(
     licenseAuthority: text("license_authority"),
     /** The car's registration number, e.g. "LEA-2207". */
     vehicleReg: text("vehicle_reg"),
+    /** The car's registration date (Excise checks such as MTMIS ask for it). */
+    vehicleRegDate: text("vehicle_reg_date"),
     riderStatus: idStatusEnum("rider_status").default("none").notNull(),
     driverStatus: idStatusEnum("driver_status").default("none").notNull(),
     rejectReason: text("reject_reason"),
@@ -417,7 +419,7 @@ export const identityDocs = pgTable(
   {
     id: serial("id").primaryKey(),
     identityId: integer("identity_id").notNull().references(() => identities.id, { onDelete: "cascade" }),
-    kind: text("kind").$type<"cnic_front" | "cnic_back" | "selfie" | "license" | "bform" | "guardian_front" | "guardian_back">().notNull(),
+    kind: text("kind").$type<"cnic_front" | "cnic_back" | "selfie" | "license" | "car_doc" | "car_photo" | "bform" | "guardian_front" | "guardian_back">().notNull(),
     mime: text("mime").notNull(),
     /** base64 of iv(12) + ciphertext + tag(16). */
     data: text("data").notNull(),

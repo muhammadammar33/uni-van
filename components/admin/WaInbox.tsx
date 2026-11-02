@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, SendHorizontal, X } from "lucide-react";
+import { MessageSquarePlus, Paperclip, SendHorizontal, X } from "lucide-react";
 
 /**
  * Keeps the page up to date: every few seconds while it's on screen, at once when the app comes back to the
@@ -105,5 +105,103 @@ export function Composer({ waId }: { waId: string }) {
         </button>
       </div>
     </form>
+  );
+}
+
+/** Start a chat with any number: opens its conversation (03xx… or with the country code). */
+export function NewChat() {
+  const router = useRouter();
+  const [num, setNum] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <form
+      className="flex flex-wrap items-start gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        let d = num.replace(/\D/g, "");
+        if (/^03\d{9}$/.test(d)) d = "92" + d.slice(1);
+        else if (/^3\d{9}$/.test(d)) d = "92" + d;
+        if (!/^\d{10,15}$/.test(d)) return setError("Enter a WhatsApp number, e.g. 0300 1234567 or +44 7700 900123.");
+        setError(null);
+        router.push(`/admin/whatsapp/${d}`);
+      }}
+    >
+      <input
+        className="input min-w-0 flex-1"
+        inputMode="tel"
+        placeholder="New chat: 0300 1234567"
+        aria-label="WhatsApp number for a new chat"
+        value={num}
+        onChange={(e) => setNum(e.target.value)}
+      />
+      <button className="btn-primary shrink-0">
+        <MessageSquarePlus className="size-4" /> New chat
+      </button>
+      {error && <p className="w-full text-sm text-red-700">{error}</p>}
+    </form>
+  );
+}
+
+export type TemplateOption = { name: string; language: string; body: string; params: number };
+
+/**
+ * Outside the 24-hour window WhatsApp only delivers approved templates: pick one, fill its blanks, send.
+ * Once they reply, the normal reply box comes back.
+ */
+export function TemplateComposer({ waId, templates, error, fresh }: { waId: string; templates: TemplateOption[]; error: string | null; fresh: boolean }) {
+  const router = useRouter();
+  const [name, setName] = useState(templates[0]?.name ?? "");
+  const [values, setValues] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const t = templates.find((x) => x.name === name);
+  const preview = t ? t.body.replace(/\{\{(\d+)\}\}/g, (m, n) => values[Number(n) - 1] || m) : "";
+  async function send() {
+    if (!t) return;
+    setBusy(true);
+    setErr(null);
+    const res = await fetch("/api/admin/wa-template", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ waId, name: t.name, values }) });
+    const j = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) return setErr(j.error ?? "Couldn't send. Please try again.");
+    setValues([]);
+    router.refresh();
+  }
+  return (
+    <div className="space-y-2 border-t border-slate-200 bg-white p-3 text-sm">
+      <p className="text-slate-600">
+        {fresh ? "Start the chat" : "It's been over 24 hours since their last message"}: WhatsApp only allows an approved template first. Once they reply, you can write freely.
+      </p>
+      {error && !templates.length ? (
+        <p className="text-red-700">Couldn&apos;t load your templates: {error}</p>
+      ) : !templates.length ? (
+        <p className="text-amber-800">No approved templates yet. Create one in WhatsApp Manager → Message templates (category Utility or Marketing), then come back.</p>
+      ) : (
+        <>
+          <select className="input" aria-label="Template" value={name} onChange={(e) => (setName(e.target.value), setValues([]))}>
+            {templates.map((x) => (
+              <option key={x.name + x.language} value={x.name}>
+                {x.name} ({x.language})
+              </option>
+            ))}
+          </select>
+          {t &&
+            Array.from({ length: t.params }, (_, i) => (
+              <input
+                key={i}
+                className="input"
+                placeholder={`Blank {{${i + 1}}}`}
+                value={values[i] ?? ""}
+                onChange={(e) => setValues((v) => Object.assign([...v], { [i]: e.target.value }))}
+              />
+            ))}
+          {t && <p className="whitespace-pre-wrap rounded-xl bg-[#d9fdd3] p-2.5 text-slate-800">{preview}</p>}
+          {err && <p className="text-red-700">{err}</p>}
+          <button type="button" className="btn-primary w-full" disabled={busy || !t} onClick={send}>
+            <SendHorizontal className="size-4" /> {busy ? "Sending…" : "Send template"}
+          </button>
+        </>
+      )}
+    </div>
   );
 }

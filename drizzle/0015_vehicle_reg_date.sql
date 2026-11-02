@@ -1,0 +1,1 @@
+ALTER TABLE "identities" ADD COLUMN "vehicle_reg_date" text;

@@ -18,12 +18,14 @@ const DOC_LABEL: Record<string, string> = {
   cnic_front: "CNIC front",
   cnic_back: "CNIC back",
   license: "Driving licence",
+  car_doc: "Car registration",
+  car_photo: "Car",
   bform: "B-form",
   guardian_front: "Parent's CNIC front",
   guardian_back: "Parent's CNIC back",
 };
-const ORDER = ["selfie", "cnic_front", "cnic_back", "bform", "guardian_front", "guardian_back", "license"];
-const REASONS = ["The photos aren't clear: please take them again in good light", "The selfie doesn't match the CNIC photo", "The details don't match the card", "The CNIC or licence has expired", "The licence couldn't be verified"];
+const ORDER = ["selfie", "cnic_front", "cnic_back", "bform", "guardian_front", "guardian_back", "license", "car_doc", "car_photo"];
+const REASONS = ["The photos aren't clear: please take them again in good light", "The selfie doesn't match the CNIC photo", "The details don't match the card", "The CNIC or licence has expired", "The licence couldn't be verified", "The car registration couldn't be verified", "The car photo doesn't match the registration"];
 
 const when = (d: Date) => d.toLocaleString("en-GB", { timeZone: "Asia/Karachi", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
@@ -57,6 +59,9 @@ export default async function VerificationDetail({ params, searchParams }: PageP
             {person.blockedAt ? "Blocked account" : `Account: ${person.name}`} →
           </Link>
         )}
+        <Link href={`/admin/whatsapp/${i.phone}`} className="rounded-full bg-[#25D366]/10 px-2.5 py-0.5 text-xs font-bold text-[#128C7E] hover:bg-[#25D366]/20">
+          WhatsApp chat →
+        </Link>
       </div>
       <p className="mb-4 text-sm text-slate-500">
         Sent {when(i.submittedAt)} · {displayPhone(i.phone)} · Rider: <b>{i.riderStatus}</b>
@@ -114,13 +119,14 @@ export default async function VerificationDetail({ params, searchParams }: PageP
               {row("Issued by", auth?.name)}
               {row("Licence expiry", i.licenseExpiry ? formatDate(i.licenseExpiry) : null)}
               {row("Car registration", i.vehicleReg)}
+              {row("Registered on", i.vehicleRegDate ? formatDate(i.vehicleRegDate) : null)}
             </dl>
           </section>
 
           {i.driverStatus !== "none" && (
             <section className="card space-y-2 !p-4 text-sm">
               <h2 className="font-bold">Check on official sites</h2>
-              <p className="text-xs text-slate-500">These sites can&apos;t be filled in from here: each link copies the number, so you just paste it.</p>
+              <p className="text-xs text-slate-500">These sites can&apos;t be filled in from here: each link copies the number, so you just paste it. MTMIS also asks for the registration date (copy it with its button).</p>
               {auth?.check && i.licenseNumber ? (
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="text-slate-500">Licence</span>
@@ -136,6 +142,7 @@ export default async function VerificationDetail({ params, searchParams }: PageP
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span className="text-slate-500">Car</span>
                   <CopyValue value={i.vehicleReg} />
+                  {i.vehicleRegDate && <CopyValue value={i.vehicleRegDate.split("-").reverse().join("-")} />}
                   {VEHICLE_CHECKS.map((v) => (
                     <CopyOpen key={v.url} href={v.url} value={i.vehicleReg!}>
                       {v.name}

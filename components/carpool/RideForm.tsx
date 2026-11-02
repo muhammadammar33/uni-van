@@ -408,7 +408,7 @@ export function RideForm({
               value={v.driverCnic ?? ""}
               onChange={(e) => set({ driverCnic: e.target.value })}
             />
-            <p className="mt-1 text-xs text-slate-500">First time? We&apos;ll also ask for photos of your CNIC, licence and a selfie (about 2 minutes, once).</p>
+            <p className="mt-1 text-xs text-slate-500">First time? We&apos;ll also ask for photos of your CNIC, licence, car registration, your car and a selfie (about 3 minutes, once).</p>
           </div>
         )}
         {idOnFile ? (

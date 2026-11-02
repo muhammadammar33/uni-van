@@ -74,7 +74,7 @@ function describe(m: Incoming): string | null {
   }
 }
 
-export const KIND_LABEL: Record<string, string> = { image: "📷 Photo", video: "🎬 Video", audio: "🎤 Voice note", document: "📄 File", sticker: "Sticker", location: "📍 Location", contacts: "👤 Contact", reaction: "Reaction" };
+export const KIND_LABEL: Record<string, string> = { template: "📋 Template", image: "📷 Photo", video: "🎬 Video", audio: "🎤 Voice note", document: "📄 File", sticker: "Sticker", location: "📍 Location", contacts: "👤 Contact", reaction: "Reaction" };
 
 export function preview(type: string, body: string | null) {
   return type === "text" ? (body ?? "") : [KIND_LABEL[type] ?? type, body].filter(Boolean).join(": ");
@@ -238,4 +238,64 @@ export async function reply(waId: string, adminId: number, text: string, file: F
   if (file && file.size <= MAX_SAVED) await db.insert(s.waMedia).values({ messageId: row.id, mime: file.type, data: Buffer.from(await file.arrayBuffer()).toString("base64") });
   // An audio file can't carry a caption: send the words as their own message.
   if (file && type === "audio" && text) await reply(waId, adminId, text, null);
+}
+
+/* ---------- Starting a conversation (approved templates) ---------- */
+
+export type WaTemplate = { name: string; language: string; category: string; body: string; params: number };
+
+/**
+ * The approved message templates of the WhatsApp Business Account behind this number. Outside the 24-hour
+ * window WhatsApp only delivers these, so they're how a new conversation starts.
+ */
+export async function waTemplates(): Promise<{ templates: WaTemplate[]; error: string | null }> {
+  if (!env("WHATSAPP_TOKEN") || !env("WHATSAPP_PHONE_NUMBER_ID")) return { templates: [], error: "WhatsApp isn't connected." };
+  const get = async (path: string) => {
+    const res = await fetch(`${API()}/${path}`, { headers: auth(), cache: "no-store" });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j?.error?.message ?? `WhatsApp said ${res.status}`);
+    return j;
+  };
+  try {
+    let waba = env("WHATSAPP_BUSINESS_ACCOUNT_ID");
+    if (!waba) {
+      // The token says which WhatsApp Business Account it manages.
+      const tok = await get(`debug_token?input_token=${encodeURIComponent(env("WHATSAPP_TOKEN"))}`);
+      const ids = (tok?.data?.granular_scopes ?? [])
+        .filter((g: { scope: string }) => g.scope.startsWith("whatsapp_business"))
+        .flatMap((g: { target_ids?: string[] }) => g.target_ids ?? [])
+        .filter((id: string) => id !== env("WHATSAPP_PHONE_NUMBER_ID"));
+      waba = ids[0] ?? "";
+    }
+    if (!waba) return { templates: [], error: "Couldn't find the WhatsApp Business Account. Set WHATSAPP_BUSINESS_ACCOUNT_ID." };
+    const j = await get(`${waba}/message_templates?fields=name,language,status,category,components&limit=100`);
+    type Raw = { name: string; language: string; status: string; category: string; components?: { type: string; text?: string }[] };
+    const templates = ((j?.data ?? []) as Raw[])
+      .filter((t) => t.status === "APPROVED" && t.category !== "AUTHENTICATION")
+      .map((t) => {
+        const body = t.components?.find((c) => c.type === "BODY")?.text ?? "";
+        const params = new Set(body.match(/\{\{\d+\}\}/g) ?? []).size;
+        return { name: t.name, language: t.language, category: t.category, body, params };
+      });
+    return { templates, error: null };
+  } catch (err) {
+    return { templates: [], error: (err as Error).message };
+  }
+}
+
+/** Sends an approved template (starts or reopens a conversation) and keeps it in the chat. */
+export async function sendTemplateTo(waId: string, adminId: number, name: string, values: string[]) {
+  if (!/^\d{8,15}$/.test(waId)) throw new Error("Not a WhatsApp number");
+  const { templates, error } = await waTemplates();
+  const t = templates.find((x) => x.name === name);
+  if (!t) throw new Error(error ?? "That template isn't approved.");
+  const params = values.slice(0, t.params).map((v) => v.trim().slice(0, 500));
+  if (params.length < t.params || params.some((v) => !v)) throw new Error("Fill in every blank in the template.");
+  const waMessageId = await sendMessage({
+    to: waId,
+    type: "template",
+    template: { name: t.name, language: { code: t.language }, components: params.length ? [{ type: "body", parameters: params.map((text) => ({ type: "text", text })) }] : [] },
+  });
+  const body = t.body.replace(/\{\{(\d+)\}\}/g, (_, n) => params[Number(n) - 1] ?? "");
+  await requireDb().insert(s.waMessages).values({ waId, direction: "out", type: "template", body, waMessageId, status: "sent", adminId, readAt: new Date() });
 }

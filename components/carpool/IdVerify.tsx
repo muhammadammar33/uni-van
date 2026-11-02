@@ -3,13 +3,13 @@
 import { Portal } from "@/components/Portal";
 import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
-import { BadgeCheck, Camera, Car, Clock, IdCard, LoaderCircle, ScanFace, ShieldCheck, X } from "lucide-react";
+import { BadgeCheck, Camera, Car, Clock, FileText, IdCard, LoaderCircle, ScanFace, ShieldCheck, X } from "lucide-react";
 import { checkId, cleanIdNumber, formatIdNumber, LICENSE_AUTHORITIES, parseCnicFront, type LicenseAuthority } from "@/lib/identityRules";
 import { todayLocal } from "@/lib/format";
 import type { IdStatus } from "@/lib/identity";
 
 type Mode = "rider" | "driver";
-type Kind = "cnic_front" | "cnic_back" | "selfie" | "license" | "bform" | "guardian_front" | "guardian_back";
+type Kind = "cnic_front" | "cnic_back" | "selfie" | "license" | "car_doc" | "car_photo" | "bform" | "guardian_front" | "guardian_back";
 export type IdPrefill = {
   phone: string;
   phoneToken?: string;
@@ -22,6 +22,8 @@ const PHOTO: Record<Kind, { label: string; icon: typeof IdCard; selfie?: boolean
   cnic_front: { label: "CNIC front", icon: IdCard },
   cnic_back: { label: "CNIC back", icon: IdCard },
   license: { label: "Driving licence", icon: Car },
+  car_doc: { label: "Car registration (book or card)", icon: FileText },
+  car_photo: { label: "Your car (plate showing)", icon: Car },
   selfie: { label: "Selfie", icon: ScanFace, selfie: true },
   bform: { label: "B-form", icon: IdCard },
   guardian_front: { label: "Parent's CNIC front", icon: IdCard },
@@ -36,11 +38,16 @@ async function compress(file: File, max: number): Promise<string> {
   c.width = Math.round(bmp.width * scale);
   c.height = Math.round(bmp.height * scale);
   c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
-  for (const q of [0.85, 0.75, 0.6]) {
+  // About 600 KB at most, so a driver's 6 photos fit in one upload (sharp enough to read a document).
+  for (const q of [0.85, 0.75, 0.65, 0.55]) {
     const url = c.toDataURL("image/jpeg", q);
-    if (url.length < 1_900_000) return url;
+    if (url.length < 600_000) return url;
   }
-  return c.toDataURL("image/jpeg", 0.5);
+  const small = document.createElement("canvas");
+  small.width = Math.round(c.width * 0.75);
+  small.height = Math.round(c.height * 0.75);
+  small.getContext("2d")!.drawImage(c, 0, 0, small.width, small.height);
+  return small.toDataURL("image/jpeg", 0.6);
 }
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -287,6 +294,7 @@ function IdDialog({ role, prefill, status, onDone }: { role: Mode; prefill: IdPr
     licenseAuthority: "" as LicenseAuthority | "",
     licenseExpiry: "",
     vehicleReg: "",
+    vehicleRegDate: "",
   });
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -295,9 +303,9 @@ function IdDialog({ role, prefill, status, onDone }: { role: Mode; prefill: IdPr
   const set = (p: Partial<typeof f>) => setF((cur) => ({ ...cur, ...p }));
 
   const kinds: Kind[] = upgrade
-    ? ["license"]
+    ? ["license", "car_doc", "car_photo"]
     : idType === "cnic"
-      ? ["cnic_front", "cnic_back", ...(role === "driver" ? (["license"] as const) : []), "selfie"]
+      ? ["cnic_front", "cnic_back", ...(role === "driver" ? (["license", "car_doc", "car_photo"] as const) : []), "selfie"]
       : ["bform", "guardian_front", "guardian_back", "selfie"];
 
   async function onPhoto(kind: Kind, file: File | undefined) {
@@ -353,7 +361,7 @@ function IdDialog({ role, prefill, status, onDone }: { role: Mode; prefill: IdPr
         today,
       ).errors;
   const missing = kinds.filter((k) => !photos[k]);
-  const driverMissing = role === "driver" && (!f.licenseNumber.trim() || !f.licenseAuthority || !f.licenseExpiry || !f.vehicleReg.trim());
+  const driverMissing = role === "driver" && (!f.licenseNumber.trim() || !f.licenseAuthority || !f.licenseExpiry || !f.vehicleReg.trim() || !f.vehicleRegDate);
   const ready = !missing.length && consent && !driverMissing && (upgrade || (!problems.length && !!f.gender && f.fullName.trim().length >= 3));
 
   async function submit() {
@@ -392,6 +400,7 @@ function IdDialog({ role, prefill, status, onDone }: { role: Mode; prefill: IdPr
                 }
               : undefined,
           vehicleReg: f.vehicleReg,
+          vehicleRegDate: f.vehicleRegDate,
           consent: true,
           scanned: scanned ?? undefined,
           photos,
@@ -560,7 +569,11 @@ function IdDialog({ role, prefill, status, onDone }: { role: Mode; prefill: IdPr
               </div>
               <Field id="lic-expiry" label="Licence expiry" type="date" value={f.licenseExpiry} onChange={(v) => set({ licenseExpiry: v })} />
             </div>
-            <Field id="car-reg" label="Car registration number" placeholder="e.g. LEA-2207 or ICT ABC-123" value={f.vehicleReg} onChange={(v) => set({ vehicleReg: v.toUpperCase() })} />
+            <div className="grid grid-cols-2 gap-2">
+              <Field id="car-reg" label="Car registration number" placeholder="e.g. LEA-2207" value={f.vehicleReg} onChange={(v) => set({ vehicleReg: v.toUpperCase() })} />
+              <Field id="car-reg-date" label="Registration date" type="date" value={f.vehicleRegDate} onChange={(v) => set({ vehicleRegDate: v })} />
+            </div>
+            <p className="text-xs text-slate-500">Both are on your car&apos;s registration book or card.</p>
           </div>
         )}
 

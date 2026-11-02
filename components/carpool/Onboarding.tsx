@@ -111,7 +111,7 @@ export function Onboarding({ account, verify, status: initialStatus, next, drive
               {(
                 [
                   ["rider", "I'll ride", "CNIC (or B-form if under 18) and a selfie. About 1 minute.", User],
-                  ["driver", "I'll drive (and ride)", "CNIC, driving licence, car registration and a selfie. About 2 minutes.", Car],
+                  ["driver", "I'll drive (and ride)", "CNIC, driving licence, car registration, a photo of your car and a selfie. About 3 minutes.", Car],
                 ] as const
               )
                 .slice()

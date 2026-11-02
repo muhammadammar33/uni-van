@@ -64,7 +64,7 @@ export default function TermsPage() {
           <S n={2} title="Who can use it">
             <L
               items={[
-                "Everyone verifies once with a real ID: drivers with their CNIC, driving licence and a selfie; riders with their CNIC and a selfie.",
+                "Everyone verifies once with a real ID: drivers with their CNIC, driving licence, car registration document, a photo of their car and a selfie; riders with their CNIC and a selfie.",
                 "Drivers must be 18 or older. Riders under 18 verify with their B-form and a parent's or guardian's CNIC, and that parent or guardian is responsible for their trips.",
                 "Use only your own ID, phone number and details, and keep them true. One person, one registration.",
                 "We may refuse a registration, or ask for more information, if something doesn't look right.",

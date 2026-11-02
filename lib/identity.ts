@@ -62,6 +62,7 @@ export const identityInput = z.object({
   guardian: z.object({ name: z.string().trim().max(80).default(""), cnic: z.string().trim().max(20).default(""), relation: z.string().trim().max(30).default("") }).optional(),
   license: z.object({ number: z.string().trim().max(30).default(""), expiry: ymdOrEmpty, authority: z.string().max(20).default("") }).optional(),
   vehicleReg: z.string().trim().max(20).optional().default(""),
+  vehicleRegDate: ymdOrEmpty,
   consent: z.literal(true, "Please agree to the ID check to continue."),
   /** What the card scan read, to compare with what was typed. */
   scanned: z.object({ idNumber: z.string().max(20).nullish(), name: z.string().max(80).nullish() }).optional(),
@@ -72,6 +73,8 @@ export const identityInput = z.object({
       cnic_back: z.string().max(3_000_000).optional(),
       selfie: z.string().max(3_000_000).optional(),
       license: z.string().max(3_000_000).optional(),
+      car_doc: z.string().max(3_000_000).optional(),
+      car_photo: z.string().max(3_000_000).optional(),
       bform: z.string().max(3_000_000).optional(),
       guardian_front: z.string().max(3_000_000).optional(),
       guardian_back: z.string().max(3_000_000).optional(),
@@ -85,6 +88,8 @@ const PHOTO_LABEL = {
   cnic_back: "the back of your CNIC",
   selfie: "your face (selfie)",
   license: "your driving licence",
+  car_doc: "your car's registration document (book or card)",
+  car_photo: "your car, with the number plate showing",
   bform: "your B-form",
   guardian_front: "the front of your parent's CNIC",
   guardian_back: "the back of your parent's CNIC",
@@ -145,7 +150,8 @@ export async function submitIdentity(raw: unknown, h: Headers, user: s.User | nu
     if (!Object.hasOwn(LICENSE_AUTHORITIES, license.authority)) throw new BookingError("Choose where your licence was issued.");
     const reg = f.vehicleReg.toUpperCase().replace(/\s+/g, " ");
     if (reg.replace(/[^A-Z0-9]/g, "").length < 3) throw new BookingError("Enter your car's registration number, e.g. LEA-2207.");
-    return { licenseNumber: license.number.toUpperCase(), licenseExpiry: license.expiry, licenseAuthority: license.authority, vehicleReg: reg };
+    if (!f.vehicleRegDate || f.vehicleRegDate > today) throw new BookingError("Enter your car's registration date (it's on the registration document).");
+    return { licenseNumber: license.number.toUpperCase(), licenseExpiry: license.expiry, licenseAuthority: license.authority, vehicleReg: reg, vehicleRegDate: f.vehicleRegDate };
   };
 
   // A verified (or waiting) rider becoming a driver: only the licence is new.
@@ -157,10 +163,11 @@ export async function submitIdentity(raw: unknown, h: Headers, user: s.User | nu
     );
     if (errors.length) throw new BookingError(errors[0]);
     const extra = driverFields();
-    const photo = readPhoto(f.photos.license, PHOTO_LABEL.license);
+    const driverKinds = ["license", "car_doc", "car_photo"] as const;
+    const docs = driverKinds.map((k) => ({ kind: k, ...readPhoto(f.photos[k], PHOTO_LABEL[k]) }));
     await db.transaction(async (tx) => {
-      await tx.delete(s.identityDocs).where(and(eq(s.identityDocs.identityId, existing.id), eq(s.identityDocs.kind, "license")));
-      await tx.insert(s.identityDocs).values({ identityId: existing.id, kind: "license", mime: photo.mime, data: encryptDoc(photo.bytes) });
+      await tx.delete(s.identityDocs).where(and(eq(s.identityDocs.identityId, existing.id), inArray(s.identityDocs.kind, [...driverKinds])));
+      await tx.insert(s.identityDocs).values(docs.map((d) => ({ identityId: existing.id, kind: d.kind, mime: d.mime, data: encryptDoc(d.bytes) })));
       await tx
         .update(s.identities)
         .set({ ...extra, driverStatus: "pending", rejectReason: null, warnings: [...new Set([...existing.warnings, ...warnings])], submittedAt: new Date() })
@@ -193,7 +200,7 @@ export async function submitIdentity(raw: unknown, h: Headers, user: s.User | nu
     warnings.push("The typed ID number differs from the one read from the card photo");
 
   const kinds: DocKind[] =
-    f.idType === "cnic" ? ["cnic_front", "cnic_back", "selfie", ...(f.mode === "driver" ? (["license"] as const) : [])] : ["bform", "guardian_front", "guardian_back", "selfie"];
+    f.idType === "cnic" ? ["cnic_front", "cnic_back", "selfie", ...(f.mode === "driver" ? (["license", "car_doc", "car_photo"] as const) : [])] : ["bform", "guardian_front", "guardian_back", "selfie"];
   const photos = kinds.map((k) => ({ kind: k, ...readPhoto(f.photos[k], PHOTO_LABEL[k]) }));
   const guardianCnic = f.idType === "bform" ? cleanIdNumber(f.guardian?.cnic ?? "") : null;
   const values = {

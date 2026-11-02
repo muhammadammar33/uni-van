@@ -2,9 +2,9 @@ import Link from "next/link";
 import { personByPhone } from "@/lib/people";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download, FileText, MapPin, Phone } from "lucide-react";
-import { AutoRefresh, Composer, ScrollToEnd } from "@/components/admin/WaInbox";
+import { AutoRefresh, Composer, ScrollToEnd, TemplateComposer } from "@/components/admin/WaInbox";
 import { requireSuper } from "@/lib/auth";
-import { canReplyAfter, conversation, KIND_LABEL, markRead } from "@/lib/waInbox";
+import { canReplyAfter, conversation, KIND_LABEL, markRead, waTemplates } from "@/lib/waInbox";
 import type { WaMessage } from "@/lib/db/schema";
 
 export const metadata = { title: "WhatsApp chat" };
@@ -66,11 +66,12 @@ export default async function WhatsAppChatPage({ params }: PageProps<"/admin/wha
   if (!/^\d{8,15}$/.test(waId)) notFound();
   await markRead(waId);
   const msgs = await conversation(waId);
-  if (!msgs.length) notFound();
   const name = msgs.findLast((m) => m.name)?.name ?? null;
   const lastIn = msgs.findLast((m) => m.direction === "in");
   const canReply = canReplyAfter(lastIn?.createdAt);
   const person = await personByPhone(waId);
+  // A new chat, or more than 24 hours since their last message: only an approved template can be sent.
+  const tpl = canReply ? null : await waTemplates();
   return (
     <div className="-mx-4 sm:mx-0">
       <AutoRefresh seconds={5} />
@@ -79,7 +80,7 @@ export default async function WhatsAppChatPage({ params }: PageProps<"/admin/wha
           <ArrowLeft className="size-5" />
         </Link>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl font-extrabold">{name ?? `+${waId}`}</h1>
+          <h1 className="truncate text-xl font-extrabold">{name ?? person?.name ?? `+${waId}`}</h1>
           <p className="text-sm text-slate-500">
             +{waId}
             {person && (
@@ -112,12 +113,11 @@ export default async function WhatsAppChatPage({ params }: PageProps<"/admin/wha
           ))}
         </ol>
         <ScrollToEnd count={msgs.length} />
+        {!msgs.length && <p className="p-6 text-center text-sm text-slate-600">No messages with +{waId} yet.</p>}
         {canReply ? (
           <Composer waId={waId} />
         ) : (
-          <p className="border-t border-slate-200 bg-white p-3 text-sm text-slate-600">
-            WhatsApp only allows replies within 24 hours of their last message. Call them, or ask them to message again.
-          </p>
+          <TemplateComposer waId={waId} templates={tpl?.templates ?? []} error={tpl?.error ?? null} fresh={!msgs.length} />
         )}
       </div>
     </div>
