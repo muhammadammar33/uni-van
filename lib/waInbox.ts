@@ -248,6 +248,19 @@ export type WaTemplate = { name: string; language: string; category: string; bod
  * The approved message templates of the WhatsApp Business Account behind this number. Outside the 24-hour
  * window WhatsApp only delivers these, so they're how a new conversation starts.
  */
+const WABA_KEY = "wa_business_account_id";
+
+/** The WhatsApp Business Account ID, as last seen (from the setup page, or from Meta's webhook deliveries). */
+export async function savedWabaId(): Promise<string> {
+  const [row] = await requireDb().select().from(s.appSettings).where(eq(s.appSettings.key, WABA_KEY));
+  return row?.value ?? "";
+}
+export async function saveWabaId(id: string) {
+  if (!/^\d{5,25}$/.test(id) || id === env("WHATSAPP_PHONE_NUMBER_ID")) return;
+  if ((await savedWabaId()) === id) return;
+  await requireDb().insert(s.appSettings).values({ key: WABA_KEY, value: id }).onConflictDoUpdate({ target: s.appSettings.key, set: { value: id } });
+}
+
 export async function waTemplates(): Promise<{ templates: WaTemplate[]; error: string | null }> {
   if (!env("WHATSAPP_TOKEN") || !env("WHATSAPP_PHONE_NUMBER_ID")) return { templates: [], error: "WhatsApp isn't connected." };
   const get = async (path: string) => {
@@ -257,7 +270,7 @@ export async function waTemplates(): Promise<{ templates: WaTemplate[]; error: s
     return j;
   };
   try {
-    let waba = env("WHATSAPP_BUSINESS_ACCOUNT_ID");
+    let waba = env("WHATSAPP_BUSINESS_ACCOUNT_ID") || (await savedWabaId());
     if (!waba) {
       // The token says which WhatsApp Business Account it manages.
       const tok = await get(`debug_token?input_token=${encodeURIComponent(env("WHATSAPP_TOKEN"))}`);
@@ -266,8 +279,13 @@ export async function waTemplates(): Promise<{ templates: WaTemplate[]; error: s
         .flatMap((g: { target_ids?: string[] }) => g.target_ids ?? [])
         .filter((id: string) => id !== env("WHATSAPP_PHONE_NUMBER_ID"));
       waba = ids[0] ?? "";
+      if (waba) await saveWabaId(waba);
     }
-    if (!waba) return { templates: [], error: "Couldn't find the WhatsApp Business Account. Set WHATSAPP_BUSINESS_ACCOUNT_ID." };
+    if (!waba)
+      return {
+        templates: [],
+        error: "the WhatsApp Business Account isn't known yet. Open WhatsApp → Setup and connect it once (it's also picked up by itself from the next message someone sends you).",
+      };
     const j = await get(`${waba}/message_templates?fields=name,language,status,category,components&limit=100`);
     type Raw = { name: string; language: string; status: string; category: string; components?: { type: string; text?: string }[] };
     const templates = ((j?.data ?? []) as Raw[])

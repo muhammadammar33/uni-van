@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
-import { saveIncoming, saveStatus, type Incoming } from "@/lib/waInbox";
+import { saveIncoming, saveStatus, saveWabaId, type Incoming } from "@/lib/waInbox";
 import { receivedMessage } from "@/lib/verify";
 import { validSignature, waConfig } from "@/lib/whatsapp";
 import { logWebhook, maskPhone } from "@/lib/webhookLog";
@@ -25,7 +25,10 @@ export async function GET(req: Request) {
 }
 
 type Payload = {
+  object?: string;
   entry?: {
+    /** The WhatsApp Business Account the delivery is for. */
+    id?: string;
     changes?: {
       value?: {
         contacts?: { wa_id?: string; profile?: { name?: string } }[];
@@ -70,6 +73,9 @@ export async function POST(req: Request) {
       }
     }
   await logWebhook(log);
+  // Remember which WhatsApp Business Account this is (its templates start new chats).
+  const waba = body.object === "whatsapp_business_account" ? body.entry?.[0]?.id : undefined;
+  if (waba) after(() => saveWabaId(waba).catch((err) => logError("waba id", err)));
   // Saving photos and voice notes and notifying the admin happens after Meta has its answer.
   if (toInbox.length || statuses.length)
     after(async () => {
