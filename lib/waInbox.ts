@@ -332,6 +332,11 @@ export async function sendTemplateTo(waId: string, adminId: number, name: string
     to: waId,
     type: "template",
     template: { name: t.name, language: { code: t.language }, components: params.length ? [{ type: "body", parameters: params.map((text) => ({ type: "text", text })) }] : [] },
+  }).catch((err: Error) => {
+    // 132001: the template isn't in the account the sending number belongs to.
+    if (/132001/.test(err.message))
+      throw new Error(`WhatsApp can't find "${t.name}" for the number this site sends from. Create the template in the WhatsApp Business Account that holds that number (see WhatsApp → Setup: the one marked "has your number").`);
+    throw err;
   });
   const body = t.body.replace(/\{\{(\d+)\}\}/g, (_, n) => params[Number(n) - 1] ?? "");
   await requireDb().insert(s.waMessages).values({ waId, direction: "out", type: "template", body, waMessageId, status: "sent", adminId, readAt: new Date() });
