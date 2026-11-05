@@ -83,7 +83,7 @@ export default async function WhatsAppAdminPage({ searchParams }: PageProps<"/ad
                 <li key={w.id} className="rounded-xl border border-slate-200 p-3 text-sm">
                   <div className="font-semibold">Account {w.id}</div>
                   <div className="text-slate-600">
-                    Numbers: {w.numbers.ok ? numbers.map((n) => n.display_phone_number).join(", ") || "none" : w.numbers.error}
+                    Numbers: {w.numbers.ok ? numbers.map((n) => `${n.display_phone_number} (ID ${n.id})`).join(", ") || "none" : w.numbers.error}
                     {hasOurs && <b className="text-emerald-700"> · has your number</b>}
                   </div>
                   <div className={apps.length ? "text-emerald-700" : "font-semibold text-red-700"}>
