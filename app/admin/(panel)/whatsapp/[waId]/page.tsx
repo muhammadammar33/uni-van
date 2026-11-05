@@ -117,7 +117,7 @@ export default async function WhatsAppChatPage({ params }: PageProps<"/admin/wha
         {canReply ? (
           <Composer waId={waId} />
         ) : (
-          <TemplateComposer waId={waId} templates={tpl?.templates ?? []} error={tpl?.error ?? null} fresh={!msgs.length} />
+          <TemplateComposer waId={waId} templates={tpl?.templates ?? []} error={tpl?.error ?? null} fresh={!msgs.length} account={tpl?.account} />
         )}
       </div>
     </div>

@@ -261,7 +261,7 @@ export async function saveWabaId(id: string) {
   await requireDb().insert(s.appSettings).values({ key: WABA_KEY, value: id }).onConflictDoUpdate({ target: s.appSettings.key, set: { value: id } });
 }
 
-export async function waTemplates(): Promise<{ templates: WaTemplate[]; error: string | null }> {
+export async function waTemplates(): Promise<{ templates: WaTemplate[]; error: string | null; account?: string }> {
   if (!env("WHATSAPP_TOKEN") || !env("WHATSAPP_PHONE_NUMBER_ID")) return { templates: [], error: "WhatsApp isn't connected." };
   const get = async (path: string) => {
     const res = await fetch(`${API()}/${path}`, { headers: auth(), cache: "no-store" });
@@ -270,21 +270,26 @@ export async function waTemplates(): Promise<{ templates: WaTemplate[]; error: s
     return j;
   };
   try {
-    let waba = env("WHATSAPP_BUSINESS_ACCOUNT_ID") || (await savedWabaId());
-    if (!waba) {
-      // The token says which WhatsApp Business Account it manages.
-      const tok = await get(`debug_token?input_token=${encodeURIComponent(env("WHATSAPP_TOKEN"))}`);
-      const ids = (tok?.data?.granular_scopes ?? [])
-        .filter((g: { scope: string }) => g.scope.startsWith("whatsapp_business"))
-        .flatMap((g: { target_ids?: string[] }) => g.target_ids ?? [])
-        .filter((id: string) => id !== env("WHATSAPP_PHONE_NUMBER_ID"));
-      waba = ids[0] ?? "";
-      if (waba) await saveWabaId(waba);
+    // The account that owns this business number: a token often reaches other accounts too (such as Meta's
+    // test account, which only has hello_world), so each candidate is checked against the number.
+    const phoneId = env("WHATSAPP_PHONE_NUMBER_ID");
+    const candidates = new Set<string>([env("WHATSAPP_BUSINESS_ACCOUNT_ID"), await savedWabaId()].filter(Boolean));
+    const tok = await get(`debug_token?input_token=${encodeURIComponent(env("WHATSAPP_TOKEN"))}`).catch(() => null);
+    for (const g of tok?.data?.granular_scopes ?? []) if (String(g.scope).startsWith("whatsapp_business")) for (const id of g.target_ids ?? []) candidates.add(String(id));
+    candidates.delete(phoneId);
+    let waba = "";
+    for (const id of candidates) {
+      const nums = await get(`${id}/phone_numbers?fields=id`).catch(() => null);
+      if ((nums?.data ?? []).some((n: { id?: string }) => n.id === phoneId)) {
+        waba = id;
+        break;
+      }
     }
+    if (waba) await saveWabaId(waba);
     if (!waba)
       return {
         templates: [],
-        error: "the WhatsApp Business Account isn't known yet. Open WhatsApp → Setup and connect it once (it's also picked up by itself from the next message someone sends you).",
+        error: "the WhatsApp Business Account that owns this number wasn't found. Open WhatsApp → Setup and connect it once (it's also picked up by itself from the next message someone sends you).",
       };
     const j = await get(`${waba}/message_templates?fields=name,language,status,category,components&limit=100`);
     type Raw = { name: string; language: string; status: string; category: string; components?: { type: string; text?: string }[] };
@@ -295,7 +300,7 @@ export async function waTemplates(): Promise<{ templates: WaTemplate[]; error: s
         const params = new Set(body.match(/\{\{\d+\}\}/g) ?? []).size;
         return { name: t.name, language: t.language, category: t.category, body, params };
       });
-    return { templates, error: null };
+    return { templates, error: null, account: waba };
   } catch (err) {
     return { templates: [], error: (err as Error).message };
   }

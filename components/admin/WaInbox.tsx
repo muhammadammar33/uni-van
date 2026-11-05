@@ -148,7 +148,7 @@ export type TemplateOption = { name: string; language: string; body: string; par
  * Outside the 24-hour window WhatsApp only delivers approved templates: pick one, fill its blanks, send.
  * Once they reply, the normal reply box comes back.
  */
-export function TemplateComposer({ waId, templates, error, fresh }: { waId: string; templates: TemplateOption[]; error: string | null; fresh: boolean }) {
+export function TemplateComposer({ waId, templates, error, fresh, account }: { waId: string; templates: TemplateOption[]; error: string | null; fresh: boolean; account?: string }) {
   const router = useRouter();
   const [name, setName] = useState(templates[0]?.name ?? "");
   const [values, setValues] = useState<string[]>([]);
@@ -200,6 +200,10 @@ export function TemplateComposer({ waId, templates, error, fresh }: { waId: stri
           <button type="button" className="btn-primary w-full" disabled={busy || !t} onClick={send}>
             <SendHorizontal className="size-4" /> {busy ? "Sending…" : "Send template"}
           </button>
+          <p className="text-xs text-slate-500">
+            {templates.length} approved template{templates.length === 1 ? "" : "s"}
+            {account ? ` from WhatsApp Business Account ${account}` : ""}. New ones appear here once Meta approves them.
+          </p>
         </>
       )}
     </div>
