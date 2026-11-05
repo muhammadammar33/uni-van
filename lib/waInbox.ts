@@ -261,7 +261,7 @@ export async function saveWabaId(id: string) {
   await requireDb().insert(s.appSettings).values({ key: WABA_KEY, value: id }).onConflictDoUpdate({ target: s.appSettings.key, set: { value: id } });
 }
 
-export async function waTemplates(): Promise<{ templates: WaTemplate[]; error: string | null; account?: string }> {
+export async function waTemplates(): Promise<{ templates: WaTemplate[]; error: string | null; account?: string; others?: string[] }> {
   if (!env("WHATSAPP_TOKEN") || !env("WHATSAPP_PHONE_NUMBER_ID")) return { templates: [], error: "WhatsApp isn't connected." };
   const get = async (path: string) => {
     const res = await fetch(`${API()}/${path}`, { headers: auth(), cache: "no-store" });
@@ -300,7 +300,11 @@ export async function waTemplates(): Promise<{ templates: WaTemplate[]; error: s
         const params = new Set(body.match(/\{\{\d+\}\}/g) ?? []).size;
         return { name: t.name, language: t.language, category: t.category, body, params };
       });
-    return { templates, error: null, account: waba };
+    // Not usable yet (in review, rejected, paused) or not for chats (code templates): listed so the admin knows why.
+    const others = ((j?.data ?? []) as Raw[])
+      .filter((t) => !(t.status === "APPROVED" && t.category !== "AUTHENTICATION"))
+      .map((t) => `${t.name} (${t.language}): ${t.category === "AUTHENTICATION" ? "code template" : t.status.toLowerCase().replace(/_/g, " ")}`);
+    return { templates, error: null, account: waba, others };
   } catch (err) {
     return { templates: [], error: (err as Error).message };
   }
