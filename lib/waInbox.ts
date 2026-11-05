@@ -249,6 +249,12 @@ export type WaTemplate = { name: string; language: string; category: string; bod
  * window WhatsApp only delivers these, so they're how a new conversation starts.
  */
 const WABA_KEY = "wa_business_account_id";
+/** Chosen by the admin for templates: used as it is, before any lookup. */
+const CHOSEN_KEY = "wa_templates_account_id";
+async function chosenWabaId() {
+  const [row] = await requireDb().select().from(s.appSettings).where(eq(s.appSettings.key, CHOSEN_KEY));
+  return row?.value ?? "";
+}
 
 /** The WhatsApp Business Account ID, as last seen (from the setup page, or from Meta's webhook deliveries). */
 export async function savedWabaId(): Promise<string> {
@@ -277,19 +283,23 @@ export async function waTemplates(): Promise<{ templates: WaTemplate[]; error: s
     const tok = await get(`debug_token?input_token=${encodeURIComponent(env("WHATSAPP_TOKEN"))}`).catch(() => null);
     for (const g of tok?.data?.granular_scopes ?? []) if (String(g.scope).startsWith("whatsapp_business")) for (const id of g.target_ids ?? []) candidates.add(String(id));
     candidates.delete(phoneId);
-    let waba = "";
-    for (const id of candidates) {
-      const nums = await get(`${id}/phone_numbers?fields=id`).catch(() => null);
-      if ((nums?.data ?? []).some((n: { id?: string }) => n.id === phoneId)) {
+    let waba = env("WHATSAPP_BUSINESS_ACCOUNT_ID") || (await chosenWabaId());
+    const checked: string[] = [];
+    for (const id of waba ? [] : candidates) {
+      const nums = await get(`${id}/phone_numbers?fields=id`).catch((e: Error) => ({ error: e.message }));
+      checked.push(`${id}: ${"error" in nums ? nums.error : `${(nums.data ?? []).length} number(s)`}`);
+      if ((nums?.data ?? []).some((n: { id?: string }) => String(n.id) === phoneId)) {
         waba = id;
         break;
       }
     }
-    if (waba) await saveWabaId(waba);
+    if (waba && waba !== (await chosenWabaId())) await saveWabaId(waba);
+    // The account chosen on the setup page (or below the template list) is used even if Meta doesn't confirm the number.
+    if (!waba) waba = env("WHATSAPP_BUSINESS_ACCOUNT_ID") || (await savedWabaId());
     if (!waba)
       return {
         templates: [],
-        error: "the WhatsApp Business Account that owns this number wasn't found. Open WhatsApp → Setup and connect it once (it's also picked up by itself from the next message someone sends you).",
+        error: `the WhatsApp Business Account that owns this number wasn't found${checked.length ? ` (checked ${checked.join("; ")})` : ""}. Enter its ID below.`,
       };
     const j = await get(`${waba}/message_templates?fields=name,language,status,category,components&limit=100`);
     type Raw = { name: string; language: string; status: string; category: string; components?: { type: string; text?: string }[] };
@@ -325,4 +335,16 @@ export async function sendTemplateTo(waId: string, adminId: number, name: string
   });
   const body = t.body.replace(/\{\{(\d+)\}\}/g, (_, n) => params[Number(n) - 1] ?? "");
   await requireDb().insert(s.waMessages).values({ waId, direction: "out", type: "template", body, waMessageId, status: "sent", adminId, readAt: new Date() });
+}
+
+/** The admin picks the WhatsApp Business Account whose templates start chats (checked: its templates must load). */
+export async function chooseWabaForTemplates(id: string): Promise<string | null> {
+  id = id.replace(/\D/g, "");
+  if (!/^\d{5,25}$/.test(id)) return "Enter the WhatsApp Business Account ID (numbers only).";
+  if (id === env("WHATSAPP_PHONE_NUMBER_ID")) return "That's the phone number ID. Enter the WhatsApp Business Account ID.";
+  const res = await fetch(`${API()}/${id}/message_templates?fields=name&limit=1`, { headers: auth(), cache: "no-store" });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) return `WhatsApp refused that account: ${j?.error?.message ?? res.status}`;
+  await requireDb().insert(s.appSettings).values({ key: CHOSEN_KEY, value: id }).onConflictDoUpdate({ target: s.appSettings.key, set: { value: id } });
+  return null;
 }

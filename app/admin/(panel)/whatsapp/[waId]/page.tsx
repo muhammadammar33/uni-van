@@ -6,6 +6,7 @@ import { AutoRefresh, Composer, ScrollToEnd, TemplateComposer } from "@/componen
 import { requireSuper } from "@/lib/auth";
 import { canReplyAfter, conversation, KIND_LABEL, markRead, waTemplates } from "@/lib/waInbox";
 import type { WaMessage } from "@/lib/db/schema";
+import { chooseTemplatesAccount } from "@/app/admin/waActions";
 
 export const metadata = { title: "WhatsApp chat" };
 export const dynamic = "force-dynamic";
@@ -60,9 +61,10 @@ function Body({ m }: { m: WaMessage }) {
 }
 
 /** One WhatsApp conversation: everything they sent (photos, voice notes, files) and replies. */
-export default async function WhatsAppChatPage({ params }: PageProps<"/admin/whatsapp/[waId]">) {
+export default async function WhatsAppChatPage({ params, searchParams }: PageProps<"/admin/whatsapp/[waId]">) {
   await requireSuper();
   const { waId } = await params;
+  const wabaError = (await searchParams).waba_error;
   if (!/^\d{8,15}$/.test(waId)) notFound();
   await markRead(waId);
   const msgs = await conversation(waId);
@@ -117,7 +119,19 @@ export default async function WhatsAppChatPage({ params }: PageProps<"/admin/wha
         {canReply ? (
           <Composer waId={waId} />
         ) : (
-          <TemplateComposer waId={waId} templates={tpl?.templates ?? []} error={tpl?.error ?? null} fresh={!msgs.length} account={tpl?.account} others={tpl?.others} />
+          <>
+            <TemplateComposer waId={waId} templates={tpl?.templates ?? []} error={tpl?.error ?? null} fresh={!msgs.length} account={tpl?.account} others={tpl?.others} />
+            <details className="border-t border-slate-200 bg-white p-3 text-sm" open={!!wabaError || !tpl?.templates.length}>
+              <summary className="cursor-pointer font-semibold text-slate-700">Use templates from another WhatsApp Business Account</summary>
+              <form action={chooseTemplatesAccount} className="mt-2 flex flex-wrap gap-2">
+                <input type="hidden" name="back" value={`/admin/whatsapp/${waId}`} />
+                <input name="waba" className="input min-w-0 flex-1" inputMode="numeric" placeholder="WhatsApp Business Account ID, e.g. 2547981235697721" aria-label="WhatsApp Business Account ID" />
+                <button className="btn-ghost">Use this account</button>
+              </form>
+              <p className="mt-1 text-xs text-slate-500">It&apos;s the ID shown in WhatsApp Manager&apos;s account switcher, for the account that has your number.</p>
+              {typeof wabaError === "string" && <p className="mt-1 text-red-700">{wabaError}</p>}
+            </details>
+          </>
         )}
       </div>
     </div>
