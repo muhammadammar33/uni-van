@@ -16,7 +16,13 @@ const time = (d: Date) => d.toLocaleString("en-GB", { timeZone: TZ, day: "numeri
 
 function Ticks({ m }: { m: WaMessage }) {
   if (m.direction !== "out") return null;
-  if (m.status === "failed") return <span className="text-red-600" title={m.error ?? ""}>Not delivered</span>;
+  if (m.status === "failed")
+    return (
+      <span className="text-red-600" title={m.error ?? ""}>
+        Not delivered{m.error ? `: ${m.error}` : ""}
+        {/payment/i.test(m.error ?? "") && " (add a payment method in WhatsApp Manager)"}
+      </span>
+    );
   return <span className={m.status === "read" ? "text-sky-500" : "text-slate-400"}>{m.status === "sent" ? "✓" : "✓✓"}</span>;
 }
 
@@ -120,7 +126,7 @@ export default async function WhatsAppChatPage({ params, searchParams }: PagePro
           <Composer waId={waId} />
         ) : (
           <>
-            <TemplateComposer waId={waId} templates={tpl?.templates ?? []} error={tpl?.error ?? null} fresh={!msgs.length} account={tpl?.account} others={tpl?.others} />
+            <TemplateComposer waId={waId} templates={tpl?.templates ?? []} error={tpl?.error ?? null} fresh={!lastIn} account={tpl?.account} others={tpl?.others} />
             <details className="border-t border-slate-200 bg-white p-3 text-sm" open={!!wabaError || !tpl?.templates.length}>
               <summary className="cursor-pointer font-semibold text-slate-700">Use templates from another WhatsApp Business Account</summary>
               <form action={chooseTemplatesAccount} className="mt-2 flex flex-wrap gap-2">

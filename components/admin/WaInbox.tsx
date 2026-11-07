@@ -170,7 +170,7 @@ export function TemplateComposer({ waId, templates, error, fresh, account, other
   return (
     <div className="space-y-2 border-t border-slate-200 bg-white p-3 text-sm">
       <p className="text-slate-600">
-        {fresh ? "Start the chat" : "It's been over 24 hours since their last message"}: WhatsApp only allows an approved template first. Once they reply, you can write freely.
+        {fresh ? "Start the chat (they haven't written to you yet)" : "It's been over 24 hours since their last message"}: WhatsApp only allows an approved template first. Once they reply, you can write freely.
       </p>
       {error && !templates.length ? (
         <p className="text-red-700">Couldn&apos;t load your templates: {error}</p>

@@ -9,7 +9,7 @@ const KEY = "hamsafar:auto-reload";
  * the page was open (the old page asks for files that are gone): one reload fixes it, so it reloads by itself,
  * at most once a minute. If that doesn't help, it shows a Reload button instead of looping.
  */
-export function AutoRecover({ reset }: { reset?: () => void }) {
+export function AutoRecover({ reset, error }: { reset?: () => void; error?: Error & { digest?: string } }) {
   const [manual, setManual] = useState(false);
   useEffect(() => {
     let last = 0;
@@ -30,6 +30,12 @@ export function AutoRecover({ reset }: { reset?: () => void }) {
     <div className="grid min-h-[60dvh] place-items-center p-6 text-center">
       <div className="space-y-3">
         <p className="text-lg font-bold">{manual ? "This page couldn't load" : "Loading the latest version…"}</p>
+        {manual && error && (
+          <p className="mx-auto max-w-md break-words text-xs text-slate-500">
+            {error.name}: {error.message.slice(0, 300)}
+            {error.digest ? ` (code ${error.digest})` : ""}
+          </p>
+        )}
         {manual && (
           <div className="flex justify-center gap-2">
             <button className="btn-primary" onClick={() => window.location.reload()}>
