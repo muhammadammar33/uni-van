@@ -6,5 +6,6 @@ export default defineConfig([
   ...nextVitals,
   ...nextTs,
   // public/ocr: the card reader's third-party files, copied as they are.
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "public/ocr/**"]),
+  // mobile: the app project (Capacitor, Android/iOS), checked and built on its own.
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "public/ocr/**", "mobile/**"]),
 ]);

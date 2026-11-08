@@ -1,0 +1,67 @@
+# Builds the Hamsafar Android app.
+# - Every push that changes mobile/: a debug APK to install and test (Actions → this run → Artifacts).
+# - A tag like app-v1.0.0: the signed release (AAB for Google Play, plus an APK), if the signing secrets are set:
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD.
+name: Android app
+
+on:
+  push:
+    branches: [main]
+    paths: ["mobile/**", ".github/workflows/android.yml"]
+    tags: ["app-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      HAMSAFAR_VERSION_CODE: ${{ github.run_number }}
+      HAMSAFAR_VERSION_NAME: ${{ startsWith(github.ref, 'refs/tags/app-v') && github.ref_name || format('1.0.0-dev.{0}', github.run_number) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npx cap sync android
+
+      - name: Debug APK
+        run: cd android && ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hamsafar-debug-${{ env.HAMSAFAR_VERSION_NAME }}
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Signed release (tags only)
+        if: startsWith(github.ref, 'refs/tags/app-v')
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          HAMSAFAR_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          HAMSAFAR_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          HAMSAFAR_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "::error::Signing secrets aren't set (ANDROID_KEYSTORE_BASE64 …)"; exit 1; fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          export HAMSAFAR_KEYSTORE_FILE="$RUNNER_TEMP/upload.jks"
+          cd android && ./gradlew bundleRelease assembleRelease --no-daemon
+          rm -f "$RUNNER_TEMP/upload.jks"
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/app-v')
+        with:
+          name: hamsafar-release-${{ env.HAMSAFAR_VERSION_NAME }}
+          path: |
+            mobile/android/app/build/outputs/bundle/release/*.aab
+            mobile/android/app/build/outputs/apk/release/*.apk

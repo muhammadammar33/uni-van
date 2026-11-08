@@ -1,0 +1,25 @@
+{
+  "name": "hamsafar-app",
+  "private": true,
+  "version": "1.0.0",
+  "description": "The Hamsafar app for Android and iPhone: hamsafar.website in a native shell (Capacitor) with native sign-in, links and, later, background location and push.",
+  "scripts": {
+    "sync": "cap sync",
+    "android:debug": "cap sync android && cd android && ./gradlew assembleDebug",
+    "android:release": "cap sync android && cd android && ./gradlew bundleRelease",
+    "assets": "capacitor-assets generate --android --iconBackgroundColor '#0f766e' --splashBackgroundColor '#0f766e'"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/browser": "8.0.5",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/splash-screen": "8.0.2",
+    "@capacitor/status-bar": "8.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "4.0.0",
+    "@capacitor/cli": "8.6.0",
+    "typescript": "5.9.3"
+  }
+}
