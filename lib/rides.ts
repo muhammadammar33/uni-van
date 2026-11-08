@@ -12,6 +12,8 @@ import { driverGate, identityByPhone, riderGate, verifiedDrivers } from "@/lib/i
 import { phoneFor } from "@/lib/account";
 import { assertPhoneNotBlocked, isPhoneBlocked } from "@/lib/people";
 import { nextRuns, runOver, runsOn, type Schedule } from "@/lib/schedule";
+import { pushLater } from "@/lib/push";
+import { formatDate } from "@/lib/format";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const newCode = () => Array.from({ length: 4 }, () => CODE_CHARS[randomInt(CODE_CHARS.length)]).join("");
@@ -90,6 +92,20 @@ const tokenOf = (raw: unknown) => (raw && typeof raw === "object" ? (raw as { ph
 /** The CNIC number a returning driver types to confirm it's them. */
 const cnicOf = (raw: unknown) => (raw && typeof raw === "object" ? (raw as { driverCnic?: unknown }).driverCnic : undefined);
 
+const first = (name: string) => name.trim().split(/\s+/)[0];
+/** Riders' numbers with a booking on this ride from today on (to tell them about the ride). */
+async function upcomingRiderPhones(rideId: number) {
+  const rows = await requireDb()
+    .select({ phone: s.rideBookings.phone })
+    .from(s.rideBookings)
+    .where(and(eq(s.rideBookings.rideId, rideId), gte(s.rideBookings.date, todayLocal())));
+  return rows.map((r) => r.phone);
+}
+async function routeName(rideId: number) {
+  const pts = await pointsFor([rideId]);
+  return pts.length ? `${pts[0].name} → ${pts[pts.length - 1].name}` : "your ride";
+}
+
 /** `user`: the signed-in driver (null only while Google sign-in isn't switched on). */
 export async function createRide(raw: unknown, user: s.User | null) {
   const { ride, points } = readRide(raw);
@@ -151,10 +167,13 @@ export async function updateRide(token: string, raw: unknown, user: s.User | nul
 
 /** Removes a ride with its route, bookings and live position. */
 export async function deleteRide(token: string) {
-  const [r] = await requireDb().select({ phone: s.rides.driverPhone }).from(s.rides).where(eq(s.rides.manageToken, token));
+  const [r] = await requireDb().select({ id: s.rides.id, phone: s.rides.driverPhone, driverName: s.rides.driverName }).from(s.rides).where(eq(s.rides.manageToken, token));
   if (!r) throw new BookingError("Ride not found", 404);
   // A blocked driver can't wipe the ride and its bookings (they may be needed to look into what happened).
   await assertPhoneNotBlocked(r.phone);
+  const riders = await upcomingRiderPhones(r.id);
+  if (riders.length)
+    pushLater(riders, { title: "Ride cancelled", body: `${first(r.driverName)} cancelled the ride ${await routeName(r.id)}. Find another ride on Hamsafar.`, url: "/search" });
   const deleted = await requireDb().delete(s.rides).where(eq(s.rides.manageToken, token)).returning({ id: s.rides.id });
   if (!deleted.length) throw new BookingError("Ride not found", 404);
 }
@@ -170,6 +189,15 @@ export async function setRideStatus(token: string, status: s.Ride["status"]) {
     if (i?.driverStatus !== "approved") throw new BookingError("Your ride goes live once your ID is approved.", 403);
   }
   await requireDb().update(s.rides).set({ status }).where(eq(s.rides.id, r.id));
+  if ((status === "cancelled" || status === "paused") && r.status === "active") {
+    const riders = await upcomingRiderPhones(r.id);
+    if (riders.length)
+      pushLater(riders, {
+        title: status === "cancelled" ? "Ride cancelled" : "Ride paused",
+        body: `${first(r.driverName)} ${status === "cancelled" ? "cancelled" : "paused"} the ride ${await routeName(r.id)}. Message the driver, or find another ride.`,
+        url: `/r/${r.slug}`,
+      });
+  }
 }
 
 const scheduleOf = (r: s.Ride): Schedule => ({ kind: r.schedule, date: r.date, days: r.days, until: r.until });
@@ -446,6 +474,11 @@ export async function bookRide(slug: string, raw: unknown, user: s.User | null):
       .insert(s.rideBookings)
       .values({ rideId: r.id, userId: user?.id ?? null, date: input.date, name: input.name, phone, gender: input.gender, seats: input.seats, pickupIdx: input.pickupIdx, dropIdx: input.dropIdx, code: newCode() })
       .returning();
+    pushLater([r.driverPhone], {
+      title: "New booking",
+      body: `${first(input.name)} booked ${input.seats === 1 ? "a seat" : `${input.seats} seats`} for ${formatDate(input.date)}: ${pts[input.pickupIdx]?.name} → ${pts[input.dropIdx]?.name}.`,
+      url: "/me",
+    });
     return bookingView(r, pts, b);
   });
 }
@@ -494,6 +527,11 @@ export async function cancelRideBooking(slug: string, phone: string, code: strin
   const f = await findBookings(slug, phone, code);
   if (!f?.upcoming) throw new BookingError("No upcoming booking found for that phone number and code.", 404);
   await requireDb().delete(s.rideBookings).where(eq(s.rideBookings.id, f.upcoming.id));
+  pushLater([f.ride.driverPhone], {
+    title: "Booking cancelled",
+    body: `${first(f.upcoming.name)} cancelled ${f.upcoming.seats === 1 ? "their seat" : `${f.upcoming.seats} seats`} for ${formatDate(f.upcoming.date)}.`,
+    url: "/me",
+  });
 }
 
 /**
@@ -576,6 +614,11 @@ export async function tripAction(token: string, raw: unknown) {
         409,
         { code: "riders_waiting", waiting: waiting.map((b) => b.id) },
       );
+    // The ride has started: riders waiting further on can watch the car coming.
+    if (leftIdx < 0) {
+      const later = today.filter((b) => b.pickupIdx > input.stopIdx && !b.noShowAt).map((b) => b.phone);
+      if (later.length) pushLater(later, { title: "Your ride has started", body: `${first(r.driverName)} is on the way. Watch the car coming on the map.`, url: `/r/${r.slug}` });
+    }
     await tx
       .insert(s.rideTrips)
       .values({ rideId: r.id, date, leftIdx: input.stopIdx })
@@ -674,12 +717,18 @@ export async function manageRide(token: string) {
 export type ManageData = NonNullable<Awaited<ReturnType<typeof manageRide>>>;
 
 export async function removeRideBooking(token: string, bookingId: number) {
-  const [r] = await requireDb().select({ id: s.rides.id, driverPhone: s.rides.driverPhone }).from(s.rides).where(eq(s.rides.manageToken, token));
+  const [r] = await requireDb()
+    .select({ id: s.rides.id, slug: s.rides.slug, driverPhone: s.rides.driverPhone, driverName: s.rides.driverName })
+    .from(s.rides)
+    .where(eq(s.rides.manageToken, token));
   if (!r) throw new BookingError("Ride not found", 404);
   await assertPhoneNotBlocked(r.driverPhone);
-  await requireDb()
+  const [b] = await requireDb()
     .delete(s.rideBookings)
-    .where(and(eq(s.rideBookings.id, bookingId), eq(s.rideBookings.rideId, r.id)));
+    .where(and(eq(s.rideBookings.id, bookingId), eq(s.rideBookings.rideId, r.id)))
+    .returning({ phone: s.rideBookings.phone, date: s.rideBookings.date });
+  if (b && b.date >= todayLocal())
+    pushLater([b.phone], { title: "Booking removed", body: `${first(r.driverName)} removed your seat for ${formatDate(b.date)}. Find another ride on Hamsafar.`, url: `/r/${r.slug}` });
 }
 
 /* ---------- Live map ---------- */

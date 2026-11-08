@@ -6,6 +6,7 @@ import { requireSuper } from "@/lib/auth";
 import { approveIdentity, deleteIdentity, rejectIdentity } from "@/lib/identity";
 import { sendTemplate, waConfig } from "@/lib/whatsapp";
 import { logError } from "@/lib/api";
+import { pushLater } from "@/lib/push";
 
 const idOf = (fd: FormData) => Number(fd.get("id")) || 0;
 
@@ -18,13 +19,19 @@ export async function approveId(fd: FormData) {
   const admin = await requireSuper();
   const r = await approveIdentity(idOf(fd), admin.id);
   await tellPerson(r.phone, process.env.WHATSAPP_APPROVED_TEMPLATE?.trim(), r.name);
+  pushLater([r.phone], {
+    title: "Your ID is approved",
+    body: r.driver ? (r.ridesLive ? "Your rides are live now: riders can book them." : "You can now offer rides and book seats.") : "You can now book any ride, including women-only and men-only rides.",
+    url: "/me",
+  });
   revalidatePath("/admin/verifications");
   redirect(`/admin/verifications/${idOf(fd)}?approved=${r.ridesLive}`);
 }
 
 export async function rejectId(fd: FormData) {
   const admin = await requireSuper();
-  await rejectIdentity(idOf(fd), admin.id, String(fd.get("reason") ?? ""));
+  const rej = await rejectIdentity(idOf(fd), admin.id, String(fd.get("reason") ?? ""));
+  pushLater([rej.phone], { title: "Your ID check needs another try", body: `${rej.reason}. Please send your ID again.`, url: "/welcome" });
   revalidatePath("/admin/verifications");
   redirect(`/admin/verifications/${idOf(fd)}?rejected=1`);
 }

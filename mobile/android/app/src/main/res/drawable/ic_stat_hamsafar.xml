@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification icon: the Hamsafar pin in white (Android tints it); the two riders are cut out. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M32,57C26.05,46.15 15,38.75 15,26A17,17 0,0 1,49 26C49,38.75 37.95,46.15 32,57Z M21.3,21.5a4.2,4.2 0,1 0,8.4 0a4.2,4.2 0,1 0,-8.4 0Z M18.3,34.5a7,7 0,0 1,13.4 0Z M34.3,21.5a4.2,4.2 0,1 0,8.4 0a4.2,4.2 0,1 0,-8.4 0Z M32.3,34.5a7,7 0,0 1,13.4 0Z" />
+</vector>

@@ -120,6 +120,13 @@
       "when": 1794098808328,
       "tag": "0016_app_sign_ins",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794103658250,
+      "tag": "0017_device_tokens",
+      "breakpoints": true
     }
   ]
 }

@@ -12,6 +12,9 @@ screen. Pages and features come from the website, so website updates reach the a
   "Sharing your live location" notification showing. It stops when they stop, leave the ride page, or after
   6 hours. Before the first time, the site shows an explanation and asks them to agree (Google Play's
   "prominent disclosure"). It doesn't need "Allow all the time" location.
+- **Push notifications** (`@capacitor/push-notifications`, Firebase Cloud Messaging): drivers hear about new
+  and cancelled bookings; riders when the ride starts, is paused or cancelled, or their booking is removed;
+  everyone when their ID check is decided. Tapping one opens its page. See "Push notifications" below.
 - **No connection**: `www/offline.html`, with a Try again button.
 - The website knows it's in the app from `window.Capacitor` and the `HamsafarApp/1.0` user agent.
 
@@ -50,3 +53,15 @@ Sources in `assets/` (made from the site's logo); regenerate with `npm run asset
   lock the phone, show the notification, then stop sharing.
 - **Data safety**: precise location, collected, shared with other users (riders of that ride), not optional
   for sharing, used for app functionality.
+
+## Push notifications (Firebase)
+
+1. https://console.firebase.google.com → **Add project** "Hamsafar" (Google Analytics: off is fine).
+2. **Add app → Android**, package name `website.hamsafar.app`, nickname "Hamsafar". Download
+   **google-services.json** and add it as the GitHub secret `GOOGLE_SERVICES_JSON` (paste the file's contents),
+   or put it at `mobile/android/app/google-services.json`. Builds without it work, just without push.
+3. **Project settings → Service accounts → Generate new private key**. In Vercel → Settings → Environment
+   Variables add `FIREBASE_SERVICE_ACCOUNT` with the whole JSON file's contents (Production), then redeploy.
+   This key can send notifications as Hamsafar: keep it only in Vercel, never in the repository or a chat.
+4. Rebuild the app (push to `mobile/` or run the workflow). Signed-in people see "Get notified about your rides"
+   in the app; after they turn it on, their phone is registered (`device_tokens`).

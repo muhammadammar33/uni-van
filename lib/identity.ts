@@ -386,6 +386,7 @@ export async function rejectIdentity(id: number, adminId: number, reason: string
       reviewedBy: adminId,
     })
     .where(eq(s.identities.id, id));
+  return { phone: i.phone, reason: r };
 }
 
 /** Deletes a person's ID data and photos (e.g. on their request). Their rides and bookings stay. */

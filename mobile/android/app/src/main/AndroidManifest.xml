@@ -46,6 +46,17 @@
             </intent-filter>
         </activity>
 
+        <!-- Push notifications: white pin icon, Hamsafar teal, and the "Rides and bookings" channel. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_hamsafar" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/hamsafar_teal" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="rides" />
+
         <!-- The live-location service (background-geolocation plugin) is only for this app, not other apps. -->
         <service
             android:name="com.equimaps.capacitor_background_geolocation.BackgroundGeolocationService"

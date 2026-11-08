@@ -551,3 +551,19 @@ export const appSignIns = pgTable("app_sign_ins", {
   next: text("next").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });
+
+/** Phones with the Hamsafar app that may get push notifications for a signed-in person (Firebase tokens). */
+export const deviceTokens = pgTable(
+  "device_tokens",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    platform: text("platform").$type<"android" | "ios">().notNull(),
+    createdAt,
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("device_tokens_user_idx").on(t.userId)],
+);

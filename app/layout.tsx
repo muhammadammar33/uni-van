@@ -5,6 +5,7 @@ import { BRAND } from "@/lib/brand";
 import { canonicalUrl } from "@/lib/url";
 import "./globals.css";
 import { AppBridge } from "@/components/AppBridge";
+import { AppPush } from "@/components/AppPush";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakarta", display: "swap" });
 
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <Tracker />
         <AppBridge />
+        <AppPush />
       </body>
     </html>
   );
