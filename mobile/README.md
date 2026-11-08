@@ -7,6 +7,11 @@ screen. Pages and features come from the website, so website updates reach the a
   returns through `website.hamsafar.app://signed-in` with a one-time code (see `lib/appSignIn.ts`).
 - **Links**: `https://hamsafar.website/r/…`, `/t/…`, `/o/…`, `/d/…`, `/search`, `/offer`, `/me` open in the app
   once `ANDROID_CERT_SHA256` is set on the website (serves `/.well-known/assetlinks.json`).
+- **Driver live location with the screen off** (`@capacitor-community/background-geolocation`): when a
+  driver starts sharing (or starts the ride), a foreground service keeps sending their location with Android's
+  "Sharing your live location" notification showing. It stops when they stop, leave the ride page, or after
+  6 hours. Before the first time, the site shows an explanation and asks them to agree (Google Play's
+  "prominent disclosure"). It doesn't need "Allow all the time" location.
 - **No connection**: `www/offline.html`, with a Try again button.
 - The website knows it's in the app from `window.Capacitor` and the `HamsafarApp/1.0` user agent.
 
@@ -36,3 +41,12 @@ GitHub Actions (`.github/workflows/android.yml`) builds a debug APK on every cha
 ## Icons and splash
 
 Sources in `assets/` (made from the site's logo); regenerate with `npm run assets`.
+
+## Google Play declarations for live location
+
+- **Foreground service type "location"** (Play Console → App content → Foreground service permissions):
+  "Drivers share their live location with the riders who booked, while the ride is on; the notification shows
+  the whole time and they can stop it any time." Google may ask for a short video: start a ride in the app,
+  lock the phone, show the notification, then stop sharing.
+- **Data safety**: precise location, collected, shared with other users (riders of that ride), not optional
+  for sharing, used for app functionality.

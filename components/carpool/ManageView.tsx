@@ -9,6 +9,7 @@ import { MapView } from "@/components/carpool/MapView";
 import { rememberRide, RideForm, type RideFormValues } from "@/components/carpool/RideForm";
 import { TripPanel } from "@/components/carpool/TripPanel";
 import { deviceId, useMyLocation } from "@/components/carpool/useMyLocation";
+import { acceptBackgroundLocation, backgroundLocationAccepted, canShareInBackground, watchLocationInBackground } from "@/lib/nativeApp";
 import { useIdVerify, verifyBy } from "@/components/carpool/IdVerify";
 import { Stars } from "@/components/carpool/Stars";
 import { GenderIcon } from "@/components/SeatMap";
@@ -26,6 +27,13 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
   const [busy, setBusy] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
+  // In the app: native location that keeps going with the screen off (asked about once first).
+  const [inBackground, setInBackground] = useState(false);
+  const [disclose, setDisclose] = useState(false);
+  const stopNative = useRef<(() => void) | null>(null);
+  const autoStop = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- known only in the browser, after hydration
+  useEffect(() => setInBackground(canShareInBackground()), []);
   const loc = useMyLocation();
   const watch = useRef<number | null>(null);
   const lastSent = useRef(0);
@@ -57,7 +65,32 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
     [token],
   );
 
+  const startNative = async () => {
+    setShareError(null);
+    setSharing(true);
+    lastSent.current = 0;
+    try {
+      stopNative.current = await watchLocationInBackground(send, (code) => {
+        setShareError(
+          code === "NOT_AUTHORIZED"
+            ? "Allow location for Hamsafar (and notifications) in your phone's settings to share it with your riders."
+            : "Couldn't get your location. Check that location is on.",
+        );
+        stopSharing();
+      });
+      // A safety stop, in case sharing is forgotten after the ride.
+      autoStop.current = setTimeout(() => stopSharing(), 6 * 3600 * 1000);
+    } catch {
+      setSharing(false);
+      setShareError("Couldn't start sharing your location.");
+    }
+  };
+
   const startSharing = async () => {
+    if (inBackground) {
+      if (!backgroundLocationAccepted()) return setDisclose(true);
+      return startNative();
+    }
     setShareError(null);
     const here = loc.pos ?? (await loc.request());
     if (!here) return setShareError("Allow location in your browser to share it with your riders.");
@@ -66,15 +99,24 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
     send(here.lat, here.lng);
     watch.current = navigator.geolocation.watchPosition((p) => send(p.coords.latitude, p.coords.longitude), undefined, { enableHighAccuracy: true, maximumAge: 10000 });
   };
-  const stopSharing = () => {
+  function stopSharing() {
     if (watch.current !== null) navigator.geolocation.clearWatch(watch.current);
     watch.current = null;
+    stopNative.current?.();
+    stopNative.current = null;
+    if (autoStop.current) clearTimeout(autoStop.current);
+    autoStop.current = null;
     setSharing(false);
     fetch("/api/live", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: `d${deviceId()}` }) }).catch(() => {});
-  };
-  useEffect(() => () => {
-    if (watch.current !== null) navigator.geolocation.clearWatch(watch.current);
-  }, []);
+  }
+  useEffect(
+    () => () => {
+      if (watch.current !== null) navigator.geolocation.clearWatch(watch.current);
+      stopNative.current?.();
+      if (autoStop.current) clearTimeout(autoStop.current);
+    },
+    [],
+  );
 
   async function setStatus(status: "active" | "paused" | "cancelled") {
     if (status === "cancelled" && !confirm("Cancel this ride for good? Riders who booked won't be told automatically: message them.")) return;
@@ -190,13 +232,53 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
       </section>
 
       <TripPanel token={token} data={data} sharing={sharing} onShare={startSharing} onStopShare={stopSharing} />
+      {disclose && (
+        <div className="fixed inset-0 z-50 grid place-items-end bg-black/40 p-3 sm:place-items-center" role="dialog" aria-modal="true" aria-labelledby="bg-loc-title">
+          <div className="w-full max-w-md space-y-3 rounded-2xl bg-white p-5 shadow-xl">
+            <h2 id="bg-loc-title" className="flex items-center gap-2 text-lg font-bold">
+              <Navigation className="size-5 text-brand" /> Share your location while driving
+            </h2>
+            <p className="text-sm text-slate-700">
+              Hamsafar uses your location <b>even when the app is closed or the screen is off</b>, so your riders can see your car coming on the map and
+              know when to step out.
+            </p>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
+              <li>Only while you share, with a notification showing the whole time.</li>
+              <li>It stops when you tap stop, close the ride, or after 6 hours.</li>
+              <li>Your exact location is shown only on this ride and on the live map of drivers.</li>
+            </ul>
+            <p className="text-xs text-slate-500">Your phone will ask to allow location and notifications for Hamsafar.</p>
+            <div className="flex gap-2">
+              <button type="button" className="btn-ghost flex-1" onClick={() => setDisclose(false)}>
+                Not now
+              </button>
+              <button
+                type="button"
+                className="btn-primary flex-1"
+                onClick={() => {
+                  acceptBackgroundLocation();
+                  setDisclose(false);
+                  void startNative();
+                }}
+              >
+                Agree and share
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {ride.status === "active" && (
         <section className="card space-y-3">
           <h2 className="flex items-center gap-2 font-bold">
             <Navigation className="size-5 text-brand" /> Live location while driving
           </h2>
-          <p className="text-sm text-slate-600">Your riders see your car on the map, and so does the live map on the home page. Keep this page open while you drive.</p>
+          <p className="text-sm text-slate-600">
+            Your riders see your car on the map, and so does the live map on the home page.{" "}
+            {inBackground
+              ? "It keeps sharing with the screen off or while you use other apps, until you stop it (or after 6 hours)."
+              : "Keep this page open while you drive."}
+          </p>
           {sharing ? (
             <button type="button" className="btn-danger w-full" onClick={stopSharing}>
               <Radio className="size-4 animate-pulse" /> Sharing live, tap to stop

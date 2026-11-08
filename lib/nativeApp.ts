@@ -57,3 +57,49 @@ export function appLinkTarget(link: string): string | null {
   if (/^https?:$/.test(u.protocol) && u.host === location.host) return u.pathname + u.search + u.hash;
   return null;
 }
+
+/** The app can keep sharing a driver's location with the screen off (a native location service). */
+export const canShareInBackground = () => !!plugin("BackgroundGeolocation")?.addWatcher;
+
+const BG_OK_KEY = "hamsafar:bg-location-ok";
+/** Whether the driver already agreed to background location (shown once, as Google Play requires). */
+export const backgroundLocationAccepted = () => {
+  try {
+    return localStorage.getItem(BG_OK_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+export const acceptBackgroundLocation = () => {
+  try {
+    localStorage.setItem(BG_OK_KEY, "1");
+  } catch {}
+};
+
+/**
+ * Follows the phone's location with the native service: keeps going with the screen off or in another app,
+ * with Android's "Sharing your live location" notification showing all along. Returns a function that stops it.
+ */
+export async function watchLocationInBackground(onPos: (lat: number, lng: number) => void, onError: (code: string) => void): Promise<() => void> {
+  const bg = plugin("BackgroundGeolocation");
+  if (!bg?.addWatcher) throw new Error("Background location isn't available");
+  const id = (await bg.addWatcher(
+    {
+      backgroundTitle: "Sharing your live location",
+      backgroundMessage: "Your riders can see your car on the map until you stop sharing in Hamsafar.",
+      requestPermissions: true,
+      stale: false,
+      distanceFilter: 15,
+    },
+    (loc: { latitude: number; longitude: number } | undefined, err: { code?: string } | undefined) => {
+      if (err) onError(err.code ?? "ERROR");
+      else if (loc) onPos(loc.latitude, loc.longitude);
+    },
+  )) as string;
+  let stopped = false;
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    void bg.removeWatcher?.({ id });
+  };
+}
