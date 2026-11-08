@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { finishSignIn } from "@/lib/google";
 import { OAUTH_COOKIE, readOAuthState, signUserSession, USER_COOKIE, USER_TTL } from "@/lib/userSession";
 import { logError } from "@/lib/api";
+import { APP_SCHEME, createAppSignIn } from "@/lib/appSignIn";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,13 @@ export async function GET(req: Request) {
     // New (or not yet verified): number and ID check first, then on to where they were going.
     const [user] = await requireDb().select().from(s.users).where(eq(s.users.id, id)).limit(1);
     const to = user && (await setupNeeded(user)) ? `/welcome?next=${encodeURIComponent(saved.next)}` : saved.next;
+    // Started in the app: hand back to the app with a one-time code (this browser tab doesn't get the session).
+    if (saved.app) {
+      const handBack = NextResponse.redirect(`${APP_SCHEME}://signed-in?code=${await createAppSignIn(id, saved.app, to)}`);
+      handBack.cookies.delete({ name: OAUTH_COOKIE, path: "/api/auth" });
+      handBack.headers.set("cache-control", "no-store");
+      return handBack;
+    }
     const res = NextResponse.redirect(new URL(to, url.origin));
     res.cookies.delete({ name: OAUTH_COOKIE, path: "/api/auth" });
     res.cookies.set(USER_COOKIE, await signUserSession(id), { httpOnly: true, secure: url.protocol === "https:", sameSite: "lax", path: "/", maxAge: USER_TTL });

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, BadgeCheck, Car, LogOut, Phone, Plus, Ticket } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { DeleteAccount } from "@/components/DeleteAccount";
 import { currentUser, myTrips, setupNeeded } from "@/lib/account";
 import { displayPhone, formatDate, formatTime, todayLocal } from "@/lib/format";
 import { identityByPhone } from "@/lib/identity";
@@ -158,6 +159,7 @@ export default async function MePage() {
             <LogOut className="size-4" /> Sign out
           </button>
         </form>
+        <DeleteAccount />
       </main>
     </div>
   );

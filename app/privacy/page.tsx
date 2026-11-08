@@ -31,6 +31,13 @@ export default function PrivacyPage() {
           <ArrowLeft className="size-4" /> Back
         </Link>
         <article className="card space-y-6">
+          <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
+            You can delete your account and its data at any time:{" "}
+            <Link href="/delete-account" className="font-semibold text-brand hover:underline">
+              how to delete your account
+            </Link>
+            .
+          </p>
           <S title="Why we check IDs">
             <p>
               Hamsafar puts strangers in the same car. To keep that safe, every driver and rider is a real, known person: drivers show their CNIC, driving licence and car,

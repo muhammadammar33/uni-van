@@ -26,7 +26,8 @@ export async function readUserSession(token: string | undefined): Promise<number
   }
 }
 
-export type OAuthState = { state: string; verifier: string; nonce: string; next: string };
+/** `app`: set when the Hamsafar app started this sign-in (its challenge; see lib/appSignIn.ts). */
+export type OAuthState = { state: string; verifier: string; nonce: string; next: string; app?: string };
 
 export async function signOAuthState(s: OAuthState) {
   return new SignJWT({ ...s, typ: "oauth" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("10m").sign(key());
@@ -37,7 +38,13 @@ export async function readOAuthState(token: string | undefined): Promise<OAuthSt
   try {
     const { payload } = await jwtVerify(token, key(), { algorithms: ["HS256"] });
     if (payload.typ !== "oauth") return null;
-    return { state: String(payload.state), verifier: String(payload.verifier), nonce: String(payload.nonce), next: String(payload.next) };
+    return {
+      state: String(payload.state),
+      verifier: String(payload.verifier),
+      nonce: String(payload.nonce),
+      next: String(payload.next),
+      ...(typeof payload.app === "string" ? { app: payload.app } : {}),
+    };
   } catch {
     return null;
   }

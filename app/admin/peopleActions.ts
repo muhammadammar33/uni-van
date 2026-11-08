@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSuper } from "@/lib/auth";
 import { blockPerson, unblockPerson } from "@/lib/people";
+import { deleteAccount } from "@/lib/deleteAccount";
 import { BookingError } from "@/lib/trips";
 
 const idOf = (fd: FormData) => Number(fd.get("id")) || 0;
@@ -28,4 +29,12 @@ export async function unblockAction(fd: FormData) {
   await unblockPerson(idOf(fd));
   revalidatePath("/admin/people");
   redirect(`/admin/people/${idOf(fd)}?unblocked=1`);
+}
+
+/** Deletes someone's account on their request (e.g. they asked on WhatsApp and can't sign in). */
+export async function deleteAccountAction(fd: FormData) {
+  await requireSuper();
+  await deleteAccount(idOf(fd));
+  revalidatePath("/admin/people");
+  redirect("/admin/people?deleted=1");
 }

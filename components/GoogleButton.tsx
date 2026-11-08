@@ -1,8 +1,17 @@
-/** Google's "Sign in with Google" button (their colours and G mark, as their branding asks). */
+"use client";
+
+import { appSignIn, inApp } from "@/lib/nativeApp";
+
+/** Google's "Sign in with Google" button (their colours and G mark, as their branding asks). In the app, sign-in opens in the phone's browser tab. */
 export function GoogleButton({ next, label = "Continue with Google", className = "" }: { next: string; label?: string; className?: string }) {
   return (
     <a
       href={`/api/auth/google?next=${encodeURIComponent(next)}`}
+      onClick={(e) => {
+        if (!inApp()) return;
+        e.preventDefault();
+        void appSignIn(next);
+      }}
       className={`inline-flex items-center justify-center gap-3 rounded-xl border border-slate-300 bg-white px-5 py-3 font-semibold text-[#1f1f1f] shadow-sm transition hover:bg-slate-50 ${className}`}
     >
       <svg viewBox="0 0 48 48" className="size-5 shrink-0" aria-hidden>

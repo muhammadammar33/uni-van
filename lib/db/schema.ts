@@ -536,3 +536,18 @@ export type Feedback = typeof feedback.$inferSelect;
 export type Identity = typeof identities.$inferSelect;
 export type WaMessage = typeof waMessages.$inferSelect;
 export type User = typeof users.$inferSelect;
+
+/**
+ * Hands a Google sign-in from the phone's browser tab to the Hamsafar app (Google doesn't allow signing in
+ * inside an app's web view). One-time, short-lived; only the app that started the sign-in can use it (it must
+ * show the secret whose hash is `challenge`). The code itself is stored only as a hash.
+ */
+export const appSignIns = pgTable("app_sign_ins", {
+  codeHash: text("code_hash").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  challenge: text("challenge").notNull(),
+  next: text("next").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});

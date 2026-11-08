@@ -25,6 +25,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
   return (
     <>
       <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">People</h1>
+      {sp.deleted && <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">Account deleted.</p>}
       <p className="mt-1 text-sm text-slate-600">Riders and drivers who signed in with Google. Open someone to see their rides and bookings, or to block them.</p>
       <form className="mt-4 flex gap-2">
         <div className="relative min-w-0 flex-1">

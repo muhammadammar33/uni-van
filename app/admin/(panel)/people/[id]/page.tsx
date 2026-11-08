@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Ban, IdCard, MessageCircle } from "lucide-react";
-import { blockAction, unblockAction } from "@/app/admin/peopleActions";
+import { blockAction, deleteAccountAction, unblockAction } from "@/app/admin/peopleActions";
 import { SubmitConfirm } from "@/components/admin/SubmitConfirm";
 import { requireSuper } from "@/lib/auth";
 import { displayPhone, formatDate, formatTime } from "@/lib/format";
@@ -98,6 +98,23 @@ export default async function PersonPage({ params, searchParams }: PageProps<"/a
             </form>
           </>
         )}
+      </section>
+
+      <section className="card mt-4 space-y-2">
+        <h2 className="font-bold">Delete this account</h2>
+        <p className="text-sm text-slate-600">
+          Only when they ask (for example on WhatsApp). Removes their account, rides, bookings, reviews, ID and WhatsApp chats, as on the public{" "}
+          <Link href="/delete-account" className="font-semibold text-brand">
+            delete-account page
+          </Link>
+          .{u.blockedAt ? " As they're blocked, their Google ID and number are kept so the block still holds." : ""}
+        </p>
+        <form action={deleteAccountAction}>
+          <input type="hidden" name="id" value={u.id} />
+          <SubmitConfirm message={`Delete ${u.name}'s account and all their data? This can't be undone.`} className="btn-ghost !text-red-700">
+            Delete account
+          </SubmitConfirm>
+        </form>
       </section>
 
       <h2 className="mt-6 font-bold">Rides they offer ({rides.length})</h2>
