@@ -30,11 +30,13 @@ export async function savePushSubscription(adminId: number, sub: unknown) {
 
 /**
  * Tells the super admins: a push notification on every phone/computer they turned notifications on for, and
- * a WhatsApp message if ADMIN_WHATSAPP and WHATSAPP_ALERT_TEMPLATE (a "Utility" template with {{1}}) are set.
+ * a WhatsApp message (if ADMIN_WHATSAPP and WHATSAPP_ALERT_TEMPLATE, a "Utility" template with {{1}}, are set)
+ * only when no push notification got through.
  * Never throws: a failed alert mustn't fail the person's submission.
  */
 export async function alertAdmins(title: string, body: string, path: string, tag = "hamsafar-admin") {
   const db = requireDb();
+  let delivered = 0;
   try {
     const [keys, subs] = await Promise.all([vapidKeys(), db.select().from(s.pushSubscriptions)]);
     const payload = JSON.stringify({ title, body, url: path, tag });
@@ -46,6 +48,7 @@ export async function alertAdmins(title: string, body: string, path: string, tag
             urgency: "high",
             vapidDetails: { subject: canonicalUrl(), publicKey: keys.publicKey, privateKey: keys.privateKey },
           })
+          .then(() => void delivered++)
           .catch(async (err: { statusCode?: number }) => {
             // The browser unsubscribed or the subscription expired: forget it.
             if (err?.statusCode === 404 || err?.statusCode === 410) await db.delete(s.pushSubscriptions).where(eq(s.pushSubscriptions.id, sub.id));
@@ -56,6 +59,8 @@ export async function alertAdmins(title: string, body: string, path: string, tag
   } catch (err) {
     logError("push alert failed", err);
   }
+  // WhatsApp costs money: only when no notification reached an admin's phone or computer.
+  if (delivered) return;
   const to = (process.env.ADMIN_WHATSAPP ?? "").replace(/\D/g, "");
   const template = process.env.WHATSAPP_ALERT_TEMPLATE?.trim();
   if (to && template && waConfig().canSend) await sendTemplate(to, template, [`${title}: ${body}`]).catch((err) => logError("WhatsApp alert failed", err));

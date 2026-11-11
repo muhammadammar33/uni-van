@@ -7,7 +7,7 @@ import { after } from "next/server";
 import { approveIdentity, deleteIdentity, purgeReviewedPhotos, rejectIdentity } from "@/lib/identity";
 import { sendTemplate, waConfig } from "@/lib/whatsapp";
 import { logError } from "@/lib/api";
-import { pushLater } from "@/lib/push";
+import { pushLater, pushToPhones } from "@/lib/push";
 
 const idOf = (fd: FormData) => Number(fd.get("id")) || 0;
 
@@ -21,12 +21,13 @@ export async function approveId(fd: FormData) {
   const r = await approveIdentity(idOf(fd), admin.id);
   // Also clears photos of IDs reviewed long enough ago (in case the daily job didn't run).
   after(() => purgeReviewedPhotos().catch((err) => logError("purge photos", err)));
-  await tellPerson(r.phone, process.env.WHATSAPP_APPROVED_TEMPLATE?.trim(), r.name);
-  pushLater([r.phone], {
+  // A free push notification when they have the app; a (paid) WhatsApp message only when they don't.
+  const pushed = await pushToPhones([r.phone], {
     title: "Your ID is approved",
     body: r.driver ? (r.ridesLive ? "Your rides are live now: riders can book them." : "You can now offer rides and book seats.") : "You can now book any ride, including women-only and men-only rides.",
     url: "/me",
-  });
+  }).catch((err) => (logError("push", err), 0));
+  if (!pushed) await tellPerson(r.phone, process.env.WHATSAPP_APPROVED_TEMPLATE?.trim(), r.name);
   revalidatePath("/admin/verifications");
   redirect(`/admin/verifications/${idOf(fd)}?approved=${r.ridesLive}`);
 }

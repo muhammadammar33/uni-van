@@ -18,6 +18,8 @@ export function verifyMode(): VerifyMode {
 }
 
 const CODE_MINUTES = 10;
+/** Codes we send cost money (people messaging us is free): a cap for the whole site per day. */
+const SEND_PER_DAY = Math.max(0, Number(process.env.VERIFY_SEND_PER_DAY ?? 200));
 const MAX_ATTEMPTS = 5;
 const TOKEN_DAYS = 90;
 
@@ -59,10 +61,11 @@ export async function startVerification(phoneRaw: unknown, methodRaw: unknown, h
   if (!phone) throw new BookingError("Enter a valid phone number, e.g. 0300 1234567");
   // Pakistani mobile numbers only (so codes can't be sent, at our cost, to numbers anywhere in the world).
   if (!/^923\d{9}$/.test(phone)) throw new BookingError("Enter a Pakistani mobile number, e.g. 0300 1234567");
-  const method = methodRaw === "message" && mode.message ? "message" : mode.send ? "send" : "message";
+  // Messaging us is the default (free, no Meta sending limit); a code is sent only when asked for.
+  const method = methodRaw === "send" && mode.send ? "send" : mode.message ? "message" : "send";
   await take(`verify-ip:${clientKey(h)}`, 15, 3600, "Too many verification requests. Please try again in an hour.");
-  // Codes we send cost money: a cap for the whole site per day, whatever the number of visitors.
-  if (method === "send") await take(`verify-send-day`, 1000, 86400, "We can't send more codes today. Please try the other way (message us), or try tomorrow.");
+  if (method === "send")
+    await take(`verify-send-day`, SEND_PER_DAY, 86400, mode.message ? "We can't send more codes today. Please verify by sending us a WhatsApp message instead." : "We can't send more codes today. Please try again tomorrow.");
   await take(`verify-phone:${phone}`, 5, 3600, "Too many codes for this number. Please try again in an hour.");
   const id = randomBytes(18).toString("base64url");
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");

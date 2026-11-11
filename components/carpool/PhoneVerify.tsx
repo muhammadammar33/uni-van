@@ -196,16 +196,22 @@ function VerifyDialog({ phone, mode, onDone }: { phone: string; mode: NonNullabl
                 <p className="rounded-xl bg-[#25D366]/10 p-2.5 text-sm font-semibold text-[#075E54]">
                   Use the WhatsApp number that&apos;s signed in on this phone ({shown}).
                 </p>
-                {mode.send && (
-                  <button type="button" className="btn w-full bg-[#25D366] py-3 text-white hover:bg-[#1ebe5b]" disabled={busy} onClick={() => start("send")}>
-                    {busy ? <LoaderCircle className="size-5 animate-spin" /> : <MessageCircle className="size-5" />} Send me a code on WhatsApp
-                  </button>
-                )}
+                {/* Main way: they message us (free for both sides, and no daily sending limit). A code we send is the fallback. */}
                 {mode.message && (
-                  <button type="button" className={mode.send ? "btn-ghost w-full" : "btn w-full bg-[#25D366] py-3 text-white hover:bg-[#1ebe5b]"} disabled={busy} onClick={() => start("message")}>
-                    {!mode.send && <MessageCircle className="size-5" />} {mode.send ? "Or verify by sending us a WhatsApp" : "Verify by sending us a WhatsApp"}
+                  <button type="button" className="btn w-full bg-[#25D366] py-3 text-white hover:bg-[#1ebe5b]" disabled={busy} onClick={() => start("message")}>
+                    {busy ? <LoaderCircle className="size-5 animate-spin" /> : <MessageCircle className="size-5" />} Verify with one WhatsApp message
                   </button>
                 )}
+                {mode.send &&
+                  (mode.message ? (
+                    <button type="button" className="w-full py-1 text-center text-sm font-semibold text-slate-500 hover:text-ink" disabled={busy} onClick={() => start("send")}>
+                      Can&apos;t send messages? Get a code instead
+                    </button>
+                  ) : (
+                    <button type="button" className="btn w-full bg-[#25D366] py-3 text-white hover:bg-[#1ebe5b]" disabled={busy} onClick={() => start("send")}>
+                      {busy ? <LoaderCircle className="size-5 animate-spin" /> : <MessageCircle className="size-5" />} Send me a code on WhatsApp
+                    </button>
+                  ))}
               </>
             )}
 
