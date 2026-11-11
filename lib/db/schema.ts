@@ -413,6 +413,8 @@ export const identities = pgTable(
     submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     reviewedBy: integer("reviewed_by").references(() => admins.id, { onDelete: "set null" }),
+    /** The ID photos were deleted (ID_PHOTO_KEEP_DAYS after review); the checked details stay. */
+    photosDeletedAt: timestamp("photos_deleted_at", { withTimezone: true }),
     createdAt,
   },
   (t) => [index("identities_rider_status_idx").on(t.riderStatus), index("identities_driver_status_idx").on(t.driverStatus)],
@@ -426,8 +428,10 @@ export const identityDocs = pgTable(
     identityId: integer("identity_id").notNull().references(() => identities.id, { onDelete: "cascade" }),
     kind: text("kind").$type<"cnic_front" | "cnic_back" | "selfie" | "license" | "car_doc" | "car_photo" | "bform" | "guardian_front" | "guardian_back">().notNull(),
     mime: text("mime").notNull(),
-    /** base64 of iv(12) + ciphertext + tag(16). */
-    data: text("data").notNull(),
+    /** base64 of iv(12) + ciphertext + tag(16), when kept in the database (no file storage connected). */
+    data: text("data"),
+    /** The same encrypted bytes in file storage (Vercel Blob, private). One of data / blobUrl is set. */
+    blobUrl: text("blob_url"),
     createdAt,
   },
   (t) => [index("identity_docs_identity_idx").on(t.identityId)],

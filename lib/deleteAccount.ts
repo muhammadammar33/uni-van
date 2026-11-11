@@ -1,6 +1,7 @@
 import "server-only";
 import { eq, inArray, or } from "drizzle-orm";
 import { requireDb, schema as s } from "@/lib/db";
+import { deleteDocs } from "@/lib/docStore";
 
 /**
  * A person deletes their Hamsafar account (Google Play and Apple require this to be possible in the app and on
@@ -11,7 +12,9 @@ import { requireDb, schema as s } from "@/lib/db";
  */
 export async function deleteAccount(userId: number) {
   const db = requireDb();
-  return db.transaction(async (tx) => {
+  // ID photo files in storage go once the database rows are gone (they're encrypted either way).
+  const files: (string | null)[] = [];
+  const done = await db.transaction(async (tx) => {
     const [u] = await tx.select().from(s.users).where(eq(s.users.id, userId)).for("update");
     if (!u) return false;
     const phone = u.phone;
@@ -24,6 +27,12 @@ export async function deleteAccount(userId: number) {
     await tx.delete(s.appSignIns).where(eq(s.appSignIns.userId, userId));
     if (phone) {
       await tx.delete(s.driverReviews).where(or(eq(s.driverReviews.riderPhone, phone), eq(s.driverReviews.driverPhone, phone)));
+      const docs = await tx
+        .select({ blobUrl: s.identityDocs.blobUrl })
+        .from(s.identityDocs)
+        .innerJoin(s.identities, eq(s.identities.id, s.identityDocs.identityId))
+        .where(eq(s.identities.phone, phone));
+      files.push(...docs.map((d) => d.blobUrl));
       await tx.delete(s.identities).where(eq(s.identities.phone, phone));
       await tx.delete(s.phoneVerifications).where(eq(s.phoneVerifications.phone, phone));
       await tx.delete(s.waMessages).where(eq(s.waMessages.waId, phone));
@@ -36,4 +45,6 @@ export async function deleteAccount(userId: number) {
     }
     return true;
   });
+  if (done) await deleteDocs(files);
+  return done;
 }

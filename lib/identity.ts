@@ -8,6 +8,7 @@ import { checkId, cleanIdNumber, LICENSE_AUTHORITIES } from "@/lib/identityRules
 import { clientKey, take } from "@/lib/rateLimit";
 import { BookingError } from "@/lib/trips";
 import { phoneFor } from "@/lib/account";
+import { blobStoreOn, deleteDocs, getDoc, putDoc } from "@/lib/docStore";
 
 /* ---------- Encryption of ID photos ---------- */
 
@@ -17,18 +18,35 @@ function docKey() {
   return createHash("sha256").update(`hamsafar-id-docs:${secret}`).digest();
 }
 
-export function encryptDoc(bytes: Buffer): string {
+/** iv(12) + ciphertext + tag(16). */
+export function encryptBytes(bytes: Buffer): Buffer {
   const iv = randomBytes(12);
   const c = createCipheriv("aes-256-gcm", docKey(), iv);
   const body = Buffer.concat([c.update(bytes), c.final()]);
-  return Buffer.concat([iv, body, c.getAuthTag()]).toString("base64");
+  return Buffer.concat([iv, body, c.getAuthTag()]);
 }
+export const encryptDoc = (bytes: Buffer) => encryptBytes(bytes).toString("base64");
 
-export function decryptDoc(data: string): Buffer {
-  const raw = Buffer.from(data, "base64");
+export function decryptBytes(raw: Buffer): Buffer {
   const d = createDecipheriv("aes-256-gcm", docKey(), raw.subarray(0, 12));
   d.setAuthTag(raw.subarray(raw.length - 16));
   return Buffer.concat([d.update(raw.subarray(12, raw.length - 16)), d.final()]);
+}
+export const decryptDoc = (data: string) => decryptBytes(Buffer.from(data, "base64"));
+
+/** How long ID photos are kept after the ID is approved or rejected (the checked details stay). */
+export const ID_PHOTO_KEEP_DAYS = Math.max(1, Number(process.env.ID_PHOTO_KEEP_DAYS) || 30);
+
+type NewDoc = { kind: DocKind; mime: string; bytes: Buffer };
+/**
+ * Encrypts photos and puts them in file storage when it's connected (else they're kept in the database).
+ * Returns the rows to insert, and the files to remove if saving the rows then fails.
+ */
+async function storeDocs(identityId: number | null, docs: NewDoc[]) {
+  const encrypted = docs.map((d) => ({ kind: d.kind, mime: d.mime, enc: encryptBytes(d.bytes) }));
+  if (!blobStoreOn()) return { rows: (id: number) => encrypted.map((d) => ({ identityId: identityId ?? id, kind: d.kind, mime: d.mime, data: d.enc.toString("base64") })), files: [] as string[] };
+  const files = await Promise.all(encrypted.map((d) => putDoc(d.enc)));
+  return { rows: (id: number) => encrypted.map((d, i) => ({ identityId: identityId ?? id, kind: d.kind, mime: d.mime, blobUrl: files[i] })), files };
 }
 
 /** A photo sent as a data URL; only real JPEG / PNG / WebP images up to 2 MB. */
@@ -165,14 +183,25 @@ export async function submitIdentity(raw: unknown, h: Headers, user: s.User | nu
     const extra = driverFields();
     const driverKinds = ["license", "car_doc", "car_photo"] as const;
     const docs = driverKinds.map((k) => ({ kind: k, ...readPhoto(f.photos[k], PHOTO_LABEL[k]) }));
-    await db.transaction(async (tx) => {
-      await tx.delete(s.identityDocs).where(and(eq(s.identityDocs.identityId, existing.id), inArray(s.identityDocs.kind, [...driverKinds])));
-      await tx.insert(s.identityDocs).values(docs.map((d) => ({ identityId: existing.id, kind: d.kind, mime: d.mime, data: encryptDoc(d.bytes) })));
-      await tx
-        .update(s.identities)
-        .set({ ...extra, driverStatus: "pending", rejectReason: null, warnings: [...new Set([...existing.warnings, ...warnings])], submittedAt: new Date() })
-        .where(eq(s.identities.id, existing.id));
-    });
+    const stored = await storeDocs(existing.id, docs);
+    const replaced = await db
+      .transaction(async (tx) => {
+        const old = await tx
+          .delete(s.identityDocs)
+          .where(and(eq(s.identityDocs.identityId, existing.id), inArray(s.identityDocs.kind, [...driverKinds])))
+          .returning({ blobUrl: s.identityDocs.blobUrl });
+        await tx.insert(s.identityDocs).values(stored.rows(existing.id));
+        await tx
+          .update(s.identities)
+          .set({ ...extra, driverStatus: "pending", rejectReason: null, warnings: [...new Set([...existing.warnings, ...warnings])], submittedAt: new Date() })
+          .where(eq(s.identities.id, existing.id));
+        return old;
+      })
+      .catch(async (err) => {
+        await deleteDocs(stored.files);
+        throw err;
+      });
+    await deleteDocs(replaced.map((d) => d.blobUrl));
     return { status: statusOf(await identityByPhone(phone)), notify: { mode: "driver" as const, name: existing.fullName } };
   }
 
@@ -223,17 +252,27 @@ export async function submitIdentity(raw: unknown, h: Headers, user: s.User | nu
     submittedAt: new Date(),
     reviewedAt: null,
     reviewedBy: null,
+    photosDeletedAt: null,
   };
-  await db.transaction(async (tx) => {
-    let id = existing?.id;
-    if (id) {
-      await tx.update(s.identities).set(values).where(eq(s.identities.id, id));
-      await tx.delete(s.identityDocs).where(eq(s.identityDocs.identityId, id));
-    } else {
-      [{ id }] = await tx.insert(s.identities).values(values).returning({ id: s.identities.id });
-    }
-    await tx.insert(s.identityDocs).values(photos.map((p) => ({ identityId: id!, kind: p.kind, mime: p.mime, data: encryptDoc(p.bytes) })));
-  });
+  const stored = await storeDocs(existing?.id ?? null, photos);
+  const replaced = await db
+    .transaction(async (tx) => {
+      let id = existing?.id;
+      let old: { blobUrl: string | null }[] = [];
+      if (id) {
+        await tx.update(s.identities).set(values).where(eq(s.identities.id, id));
+        old = await tx.delete(s.identityDocs).where(eq(s.identityDocs.identityId, id)).returning({ blobUrl: s.identityDocs.blobUrl });
+      } else {
+        [{ id }] = await tx.insert(s.identities).values(values).returning({ id: s.identities.id });
+      }
+      await tx.insert(s.identityDocs).values(stored.rows(id!));
+      return old;
+    })
+    .catch(async (err) => {
+      await deleteDocs(stored.files);
+      throw err;
+    });
+  await deleteDocs(replaced.map((d) => d.blobUrl));
   return { status: statusOf(await identityByPhone(phone)), notify: { mode: f.mode, name: values.fullName } };
 }
 
@@ -391,7 +430,38 @@ export async function rejectIdentity(id: number, adminId: number, reason: string
 
 /** Deletes a person's ID data and photos (e.g. on their request). Their rides and bookings stay. */
 export async function deleteIdentity(id: number) {
+  const files = await requireDb().select({ blobUrl: s.identityDocs.blobUrl }).from(s.identityDocs).where(eq(s.identityDocs.identityId, id));
   await requireDb().delete(s.identities).where(eq(s.identities.id, id));
+  await deleteDocs(files.map((f) => f.blobUrl));
+}
+
+/**
+ * Deletes ID photos ID_PHOTO_KEEP_DAYS after the ID was approved or rejected (not while anything is waiting
+ * for review). The checked details (name, number, dates) stay. Runs daily, and after reviews.
+ */
+export async function purgeReviewedPhotos(limit = 300) {
+  const db = requireDb();
+  const due = await db
+    .select({ id: s.identityDocs.id, blobUrl: s.identityDocs.blobUrl, identityId: s.identityDocs.identityId })
+    .from(s.identityDocs)
+    .innerJoin(s.identities, eq(s.identities.id, s.identityDocs.identityId))
+    .where(
+      and(
+        sql`${s.identities.reviewedAt} < now() - make_interval(days => ${ID_PHOTO_KEEP_DAYS})`,
+        sql`${s.identityDocs.createdAt} < now() - make_interval(days => ${ID_PHOTO_KEEP_DAYS})`,
+        ne(s.identities.riderStatus, "pending"),
+        ne(s.identities.driverStatus, "pending"),
+      ),
+    )
+    .limit(limit);
+  if (!due.length) return 0;
+  await db.delete(s.identityDocs).where(inArray(s.identityDocs.id, due.map((d) => d.id)));
+  await db
+    .update(s.identities)
+    .set({ photosDeletedAt: new Date() })
+    .where(inArray(s.identities.id, [...new Set(due.map((d) => d.identityId))]));
+  await deleteDocs(due.map((d) => d.blobUrl));
+  return due.length;
 }
 
 /** One ID photo, decrypted, for a super admin; the view is logged. */
@@ -400,7 +470,7 @@ export async function openDoc(docId: number, adminId: number) {
   const [d] = await db.select().from(s.identityDocs).where(eq(s.identityDocs.id, docId));
   if (!d) return null;
   await db.insert(s.idAccessLog).values({ adminId, identityId: d.identityId, docKind: d.kind });
-  return { mime: d.mime, bytes: decryptDoc(d.data) };
+  return { mime: d.mime, bytes: d.blobUrl ? decryptBytes(await getDoc(d.blobUrl)) : decryptDoc(d.data ?? "") };
 }
 
 /** The gender on the ID a signed-in person already sent (being checked or approved), so forms needn't ask again. */

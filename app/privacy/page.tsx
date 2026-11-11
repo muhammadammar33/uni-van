@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { BRAND } from "@/lib/brand";
 import { CHAT_KEEP_DAYS } from "@/lib/chat";
+import { ID_PHOTO_KEEP_DAYS } from "@/lib/identity";
 
 export const metadata: Metadata = { title: "Privacy", description: `What ${BRAND.name} keeps about you, why, and who can see it.` };
 
@@ -65,7 +66,10 @@ export default function PrivacyPage() {
               <b>Only the Hamsafar team.</b> Drivers never see riders&apos; IDs and riders never see drivers&apos;. Riders only see a driver&apos;s first name, car, rating and an
               &ldquo;ID verified&rdquo; badge; the driver&apos;s phone number is shown only after booking, and a rider&apos;s number only to their own driver.
             </p>
-            <p>ID photos are stored encrypted. Each time a team member opens one, it is recorded.</p>
+            <p>
+              ID photos are encrypted before they are stored, in private storage. Each time a team member opens one, it is recorded. The photos are deleted {ID_PHOTO_KEEP_DAYS} days after your ID is checked; the details
+              we checked (name, ID number and dates) are kept so your verification stays valid.
+            </p>
             <p>We share information with the police or other authorities only when the law requires it, for example after an incident on a ride.</p>
           </S>
           <S title="How long we keep it">

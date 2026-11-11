@@ -6,7 +6,7 @@ import { approveId, deleteId, rejectId } from "@/app/admin/verificationActions";
 import { ConfirmButton } from "@/components/admin/ConfirmButton";
 import { requireSuper } from "@/lib/auth";
 import { displayPhone, formatDate, formatTime } from "@/lib/format";
-import { identityDetail } from "@/lib/identity";
+import { identityDetail, ID_PHOTO_KEEP_DAYS } from "@/lib/identity";
 import { ageOn, formatIdNumber, LICENSE_AUTHORITIES, VEHICLE_CHECKS, type LicenseAuthority } from "@/lib/identityRules";
 import { todayLocal } from "@/lib/format";
 import { CopyOpen, CopyValue } from "@/components/admin/CopyOpen";
@@ -100,7 +100,16 @@ export default async function VerificationDetail({ params, searchParams }: PageP
               </a>
             ))}
           </div>
-          <p className="mt-2 px-1 text-xs text-slate-500">Compare the selfie with the CNIC photo. Each time a photo is opened, it&apos;s logged.</p>
+          {docs2.length === 0 && (
+            <p className="rounded-xl bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
+              {i.photosDeletedAt
+                ? `Photos deleted on ${i.photosDeletedAt.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}, ${ID_PHOTO_KEEP_DAYS} days after review. The checked details below stay.`
+                : "No photos."}
+            </p>
+          )}
+          <p className="mt-2 px-1 text-xs text-slate-500">
+            Compare the selfie with the CNIC photo. Each time a photo is opened, it&apos;s logged. Photos are deleted {ID_PHOTO_KEEP_DAYS} days after review.
+          </p>
         </section>
 
         <div className="space-y-4">

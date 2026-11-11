@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSuper } from "@/lib/auth";
-import { approveIdentity, deleteIdentity, rejectIdentity } from "@/lib/identity";
+import { after } from "next/server";
+import { approveIdentity, deleteIdentity, purgeReviewedPhotos, rejectIdentity } from "@/lib/identity";
 import { sendTemplate, waConfig } from "@/lib/whatsapp";
 import { logError } from "@/lib/api";
 import { pushLater } from "@/lib/push";
@@ -18,6 +19,8 @@ async function tellPerson(phone: string, template: string | undefined, name: str
 export async function approveId(fd: FormData) {
   const admin = await requireSuper();
   const r = await approveIdentity(idOf(fd), admin.id);
+  // Also clears photos of IDs reviewed long enough ago (in case the daily job didn't run).
+  after(() => purgeReviewedPhotos().catch((err) => logError("purge photos", err)));
   await tellPerson(r.phone, process.env.WHATSAPP_APPROVED_TEMPLATE?.trim(), r.name);
   pushLater([r.phone], {
     title: "Your ID is approved",

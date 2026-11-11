@@ -3,7 +3,9 @@
  * from ADMIN_EMAIL / ADMIN_PASSWORD. Safe to run on every deploy; skips when DATABASE_URL is not set.
  */
 import bcrypt from "bcryptjs";
-import { asc, count, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { put } from "@vercel/blob";
+import { and, asc, count, eq, isNotNull, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
@@ -53,7 +55,37 @@ async function main() {
     }
   }
 
+  await moveIdPhotosToFiles(db);
   await client.end();
+}
+
+/**
+ * Once a Vercel Blob store is connected (BLOB_READ_WRITE_TOKEN), moves ID photos still kept in the database
+ * into it, as the same encrypted bytes (nothing is decrypted here). A failure is logged and retried on the
+ * next deploy; it never stops the deploy.
+ */
+async function moveIdPhotosToFiles(db: ReturnType<typeof drizzle<typeof s>>) {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return;
+  const access = (process.env.ID_BLOB_ACCESS === "public" ? "public" : "private") as "public" | "private";
+  let moved = 0;
+  try {
+    for (;;) {
+      const batch = await db
+        .select({ id: s.identityDocs.id, data: s.identityDocs.data })
+        .from(s.identityDocs)
+        .where(and(isNull(s.identityDocs.blobUrl), isNotNull(s.identityDocs.data)))
+        .limit(20);
+      if (!batch.length) break;
+      for (const d of batch) {
+        const { url } = await put(`id-docs/${randomUUID()}.bin`, Buffer.from(d.data!, "base64"), { access, addRandomSuffix: true, contentType: "application/octet-stream" });
+        await db.update(s.identityDocs).set({ blobUrl: url, data: null }).where(eq(s.identityDocs.id, d.id));
+        moved++;
+      }
+    }
+    if (moved) console.log(`[db-setup] moved ${moved} ID photos to file storage`);
+  } catch (err) {
+    console.warn(`[db-setup] moving ID photos to file storage stopped after ${moved}:`, (err as Error).message);
+  }
 }
 
 main().catch((err) => {
