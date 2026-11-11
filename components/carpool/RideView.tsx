@@ -20,6 +20,7 @@ import type { Account } from "@/lib/account";
 import { GoogleButton } from "@/components/GoogleButton";
 import { addDays, describeSchedule } from "@/lib/schedule";
 import type { VerifyMode } from "@/lib/verify";
+import { ChatButton } from "@/components/carpool/RideChat";
 
 const PROFILE = "hamsafar:rider";
 const bookingKey = (slug: string) => `hamsafar:booking:${slug}`;
@@ -468,6 +469,8 @@ function Ticket({
   slug: string;
   verified: boolean;
 }) {
+  // Opened from a chat notification (/r/<slug>?chat=1).
+  const [openChat] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("chat"));
   const msg = `Assalam o Alaikum ${booking.driverName.split(" ")[0]}, I booked ${booking.seats > 1 ? `${booking.seats} seats` : "a seat"} on your Hamsafar ride on ${formatDate(booking.date)}: ${booking.pickup} → ${booking.drop} at ${formatTime(booking.departTime)}. Name: ${booking.name}. Code ${booking.code}.`;
   return (
     <section className="animate-rise overflow-hidden rounded-3xl bg-white shadow-lift">
@@ -508,7 +511,10 @@ function Ticket({
             {booking.car}
             {booking.plate ? ` · ${booking.plate}` : ""} · {displayPhone(booking.driverPhone)}
           </dd>
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="mt-3">
+            <ChatButton chat={booking.chat} otherName={booking.driverName} autoOpen={openChat} />
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
             <a href={`https://wa.me/${booking.driverPhone}?text=${encodeURIComponent(msg)}`} target="_blank" rel="noreferrer" className="btn bg-[#25D366] text-white hover:bg-[#1ebe5b]">
               <MessageCircle className="size-4" /> WhatsApp
             </a>
@@ -520,7 +526,7 @@ function Ticket({
         </div>
       </dl>
       <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3">
-        <p className="text-xs text-slate-500">Message the driver to confirm. Keep your code to cancel later.</p>
+        <p className="text-xs text-slate-500">Chat with the driver to confirm. Keep your code to cancel later.</p>
         <button className="btn-ghost shrink-0 !text-red-600" onClick={onCancel} disabled={busy}>
           Cancel seat
         </button>

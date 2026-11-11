@@ -13,6 +13,7 @@ import { acceptBackgroundLocation, backgroundLocationAccepted, canShareInBackgro
 import { useIdVerify, verifyBy } from "@/components/carpool/IdVerify";
 import { Stars } from "@/components/carpool/Stars";
 import { GenderIcon } from "@/components/SeatMap";
+import { ChatButton } from "@/components/carpool/RideChat";
 import { displayPhone, formatDate, formatFare, formatTime, todayLocal } from "@/lib/format";
 import type { ManageData } from "@/lib/rides";
 import type { VerifyMode } from "@/lib/verify";
@@ -347,6 +348,7 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
                             {b.pickup} → {b.drop}
                           </div>
                         </div>
+                        <ChatButton chat={b.chat} otherName={b.name} unread={b.chat.unread} compact />
                         <a href={`tel:+${b.phone}`} className="grid size-9 place-items-center rounded-full border border-slate-200 text-slate-600" aria-label={`Call ${b.name}`}>
                           <Phone className="size-4" />
                         </a>

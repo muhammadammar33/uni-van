@@ -9,6 +9,7 @@ import { ORG_COOKIE, requireAdmin } from "@/lib/auth";
 import { db, schema as s } from "@/lib/db";
 import { pendingCount } from "@/lib/identity";
 import { unreadCount } from "@/lib/waInbox";
+import { feedbackCounts } from "@/lib/feedback";
 import { orgInfo } from "@/lib/orgTypes";
 import { leaveOrg, logout } from "../actions";
 
@@ -32,7 +33,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       { href: "/admin/people", label: "People", icon: "people" },
       { href: "/admin/orgs", label: "Organisations", icon: "orgs" },
       { href: "/admin/rides", label: "Carpool", icon: "carpool" },
-      { href: "/admin/feedback", label: "Feedback", icon: "feedback" },
+      { href: "/admin/feedback", label: "Feedback", icon: "feedback", badge: await feedbackCounts().then((c) => c.new).catch(() => 0) },
       { href: "/admin/whatsapp", label: "WhatsApp", icon: "wa", badge: await unreadCount().catch(() => 0) },
     );
 

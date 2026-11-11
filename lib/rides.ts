@@ -14,6 +14,7 @@ import { assertPhoneNotBlocked, isPhoneBlocked } from "@/lib/people";
 import { nextRuns, runOver, runsOn, type Schedule } from "@/lib/schedule";
 import { pushLater } from "@/lib/push";
 import { formatDate } from "@/lib/format";
+import { chatKey, driverUnread } from "@/lib/chat";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const newCode = () => Array.from({ length: 4 }, () => CODE_CHARS[randomInt(CODE_CHARS.length)]).join("");
@@ -404,6 +405,8 @@ export type RideBookingView = {
   noShow: boolean;
   /** Wrong ride codes left before the check stops. */
   codeTriesLeft: number;
+  /** The private chat with the driver (only ever sent to the rider who booked). */
+  chat: { id: number; key: string };
 };
 
 const BOARD_TRIES = 5;
@@ -435,6 +438,7 @@ function bookingView(r: s.Ride, pts: s.RidePoint[], b: s.RideBooking): RideBooki
     boarded: !!b.boardedAt,
     noShow: !!b.noShowAt,
     codeTriesLeft: Math.max(0, BOARD_TRIES - b.boardTries),
+    chat: { id: b.id, key: chatKey(b.id, "rider") },
   };
 }
 
@@ -679,7 +683,7 @@ export async function manageRide(token: string) {
       .orderBy(asc(s.rideBookings.date), asc(s.rideBookings.pickupIdx)),
   ]);
   const runs = r.status === "active" ? upcomingRuns(r, 14) : [];
-  const [ratings, reviews, ident, [trip]] = await Promise.all([
+  const [ratings, reviews, ident, [trip], unread] = await Promise.all([
     ratingsFor([r.driverPhone]),
     reviewsFor(r.driverPhone, 20),
     identityByPhone(r.driverPhone),
@@ -687,6 +691,7 @@ export async function manageRide(token: string) {
       .select()
       .from(s.rideTrips)
       .where(and(eq(s.rideTrips.rideId, r.id), eq(s.rideTrips.date, todayLocal()))),
+    driverUnread(bookings),
   ]);
   return {
     ride: r,
@@ -707,6 +712,7 @@ export async function manageRide(token: string) {
       pickupIdx: b.pickupIdx,
       boarded: !!b.boardedAt,
       noShow: !!b.noShowAt,
+      chat: { id: b.id, key: chatKey(b.id, "driver"), unread: unread.get(b.id) ?? 0 },
     })),
     /** Today's trip: the last stop left (-1 before starting), or null when the ride doesn't run today. */
     trip: runs.includes(todayLocal()) || bookings.some((b) => b.date === todayLocal()) ? { date: todayLocal(), leftIdx: trip?.leftIdx ?? -1 } : null,

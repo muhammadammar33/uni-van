@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { BRAND } from "@/lib/brand";
+import { CHAT_KEEP_DAYS } from "@/lib/chat";
 
 export const metadata: Metadata = { title: "Privacy", description: `What ${BRAND.name} keeps about you, why, and who can see it.` };
 
@@ -52,6 +53,11 @@ export default function PrivacyPage() {
               <li>For drivers: driving licence number, expiry and photo, and the car&apos;s registration number.</li>
               <li>Visit counts for our own statistics: daily totals per page and a code that changes every day, never your IP address. No outside analytics or advertising trackers.</li>
               <li>Your rides, bookings and ratings. Your location only while you choose to share it (riders are shown blurred and without a name).</li>
+              <li>
+                Chat messages between a driver and a rider who booked (text only). Only the two of you can read them; the Hamsafar team sees a chat only
+                if one of you reports it, which sends us a copy. Chats are deleted {CHAT_KEEP_DAYS} days after they&apos;re sent, or sooner if the booking is
+                cancelled.
+              </li>
             </ul>
           </S>
           <S title="Who can see it">

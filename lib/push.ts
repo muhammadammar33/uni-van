@@ -59,7 +59,8 @@ export async function forgetDevice(token: string, userId?: number) {
     .where(userId ? and(eq(s.deviceTokens.token, token), eq(s.deviceTokens.userId, userId)) : eq(s.deviceTokens.token, token));
 }
 
-export type PushMessage = { title: string; body: string; url: string };
+/** `tag`: a newer notification with the same tag replaces the older one (e.g. one per chat). */
+export type PushMessage = { title: string; body: string; url: string; tag?: string };
 
 /** Sends to every app the people with these numbers are signed in to. Returns how many phones got it. */
 export async function pushToPhones(phones: string[], msg: PushMessage): Promise<number> {
@@ -85,7 +86,7 @@ export async function pushToPhones(phones: string[], msg: PushMessage): Promise<
             token,
             notification: { title: msg.title.slice(0, 100), body: msg.body.slice(0, 300) },
             data: { url: msg.url },
-            android: { priority: "high", notification: { channel_id: "rides", color: "#0f766e", icon: "ic_stat_hamsafar" } },
+            android: { priority: "high", notification: { channel_id: "rides", color: "#0f766e", icon: "ic_stat_hamsafar", ...(msg.tag ? { tag: msg.tag } : {}) } },
           },
         }),
       });

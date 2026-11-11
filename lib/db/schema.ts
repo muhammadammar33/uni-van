@@ -259,6 +259,11 @@ export const rideBookings = pgTable(
     boardTries: integer("board_tries").default(0).notNull(),
     /** The driver marked the rider as not at the pickup (so the trip could go on), or null. */
     noShowAt: timestamp("no_show_at", { withTimezone: true }),
+    /** Chat: the last message each side has seen (message ids), for unread badges. */
+    riderReadId: integer("rider_read_id").default(0).notNull(),
+    driverReadId: integer("driver_read_id").default(0).notNull(),
+    /** Chat: who closed (blocked) this conversation, or null while it's open. */
+    chatClosedBy: text("chat_closed_by").$type<"driver" | "rider">(),
     createdAt,
   },
   (t) => [uniqueIndex("ride_bookings_ride_date_phone_uq").on(t.rideId, t.date, t.phone), index("ride_bookings_ride_date_idx").on(t.rideId, t.date)],
@@ -567,3 +572,23 @@ export const deviceTokens = pgTable(
   },
   (t) => [index("device_tokens_user_idx").on(t.userId)],
 );
+
+/**
+ * Private chat between a driver and one rider who booked (text only). Open from booking until a day after the
+ * ride; deleted with the booking, and on its own after CHAT_KEEP_DAYS. Admins never browse chats: a reported
+ * chat is copied into a safety report (feedback) with the reporter's consent.
+ */
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: serial("id").primaryKey(),
+    bookingId: integer("booking_id")
+      .notNull()
+      .references(() => rideBookings.id, { onDelete: "cascade" }),
+    sender: text("sender").$type<"driver" | "rider">().notNull(),
+    body: text("body").notNull(),
+    createdAt,
+  },
+  (t) => [index("chat_messages_booking_idx").on(t.bookingId, t.id), index("chat_messages_created_idx").on(t.createdAt)],
+);
+export type ChatMessage = typeof chatMessages.$inferSelect;

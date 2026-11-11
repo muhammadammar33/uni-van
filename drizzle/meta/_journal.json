@@ -127,6 +127,13 @@
       "when": 1794103658250,
       "tag": "0017_device_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794363947017,
+      "tag": "0018_ride_chat",
+      "breakpoints": true
     }
   ]
 }
