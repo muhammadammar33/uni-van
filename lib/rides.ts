@@ -16,7 +16,8 @@ import { nextRuns, runOver, runsOn, type Schedule } from "@/lib/schedule";
 import { pushLater } from "@/lib/push";
 import { formatDate } from "@/lib/format";
 import { chatKey, driverUnread } from "@/lib/chat";
-import { fareGuide, PETROL_PRICE } from "@/lib/fare";
+import { fareGuide } from "@/lib/fare";
+import { currentPetrolPrice } from "@/lib/petrol";
 import { notifyRouteAlerts } from "@/lib/routeAlerts";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -55,7 +56,7 @@ export const rideInput = z
 
 export type RideInput = z.input<typeof rideInput>;
 
-function readRide(raw: unknown) {
+function readRide(raw: unknown, petrolPrice: number) {
   const parsed = rideInput.safeParse(raw);
   if (!parsed.success) throw new BookingError(parsed.error.issues[0]?.message ?? "Check the form");
   const r = parsed.data;
@@ -71,10 +72,10 @@ function readRide(raw: unknown) {
   }
   // Fares share the fuel cost (lib/fare.ts): no more than half again above the suggested fare.
   if (typeof r.fare === "number" && r.fare > 0) {
-    const g = fareGuide(r.points);
+    const g = fareGuide(r.points, petrolPrice);
     if (r.fare > g.max)
       throw new BookingError(
-        `Hamsafar fares share the cost of fuel: for this route (about ${g.km} km) the most you can ask is Rs. ${g.max} a seat. The suggested fare is Rs. ${g.suggested} (petrol at Rs. ${PETROL_PRICE} a litre).`,
+        `Hamsafar fares share the cost of fuel: for this route (about ${g.km} km) the most you can ask is Rs. ${g.max} a seat. The suggested fare is Rs. ${g.suggested} (petrol at Rs. ${petrolPrice} a litre).`,
       );
   }
   return {
@@ -120,7 +121,7 @@ async function routeName(rideId: number) {
 
 /** `user`: the signed-in driver (null only while Google sign-in isn't switched on). */
 export async function createRide(raw: unknown, user: s.User | null) {
-  const { ride, points } = readRide(raw);
+  const { ride, points } = readRide(raw, (await currentPetrolPrice()).price);
   ride.driverPhone = await phoneFor(user, ride.driverPhone, tokenOf(raw));
   if (ride.schedule === "once" && ride.date < todayLocal()) throw new BookingError("The date has already passed");
   // The driver's ID: rides of drivers still being checked are saved, and go live once they're approved.
@@ -153,7 +154,7 @@ function notifyLater(rideIds: number[]) {
 /** Replaces a ride's details and route (only while nobody has booked a future date at a removed stop). */
 /** `user`: whoever is signed in, if anyone (the manage link is the key to the ride). */
 export async function updateRide(token: string, raw: unknown, user: s.User | null = null) {
-  const { ride, points } = readRide(raw);
+  const { ride, points } = readRide(raw, (await currentPetrolPrice()).price);
   const db = requireDb();
   return db.transaction(async (tx) => {
     const [row] = await tx.select().from(s.rides).where(eq(s.rides.manageToken, token)).for("update");

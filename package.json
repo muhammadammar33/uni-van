@@ -26,6 +26,7 @@
     "read-excel-file": "^5.8.8",
     "server-only": "^0.0.1",
     "tesseract.js": "^5.1.1",
+    "unpdf": "^2.1.0",
     "web-push": "^3.6.7",
     "zod": "^4.6.7"
   },

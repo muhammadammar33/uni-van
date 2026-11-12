@@ -4,6 +4,7 @@ import { logError } from "@/lib/api";
 import { CHAT_KEEP_DAYS } from "@/lib/chat";
 import { requireDb, schema as s } from "@/lib/db";
 import { purgeReviewedPhotos } from "@/lib/identity";
+import { refreshPetrolPrice } from "@/lib/petrol";
 
 /**
  * Daily clean-up, run by Vercel Cron (vercel.json): ID photos past their keep time, and old chat messages.
@@ -23,7 +24,10 @@ export async function GET(req: Request) {
       .delete(s.chatMessages)
       .where(lt(s.chatMessages.createdAt, sql`now() - make_interval(days => ${CHAT_KEEP_DAYS})`))
       .returning({ id: s.chatMessages.id });
-    return NextResponse.json({ ok: true, photosDeleted: photos, chatMessagesDeleted: chats.length });
+    // Today's petrol price from OGRA's official notice (fare suggestions and the fare cap use it).
+    const petrol = await refreshPetrolPrice();
+    if (!petrol.ok) logError("petrol price", { name: "OGRA", code: petrol.note });
+    return NextResponse.json({ ok: true, photosDeleted: photos, chatMessagesDeleted: chats.length, petrol });
   } catch (err) {
     logError("cron daily", err);
     return NextResponse.json({ ok: false }, { status: 500 });

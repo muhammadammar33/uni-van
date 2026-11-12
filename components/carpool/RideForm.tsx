@@ -9,7 +9,7 @@ import { usePhoneVerify, VerifiedHint } from "@/components/carpool/PhoneVerify";
 import { KindTabs } from "@/components/carpool/KindTabs";
 import { PlacePicker } from "@/components/carpool/PlacePicker";
 import { GenderIcon } from "@/components/SeatMap";
-import { displayPhone, normalizePhone, todayLocal } from "@/lib/format";
+import { displayPhone, formatDate, normalizePhone, todayLocal } from "@/lib/format";
 import { cleanIdNumber } from "@/lib/identityRules";
 import type { Gender } from "@/lib/layout";
 import type { Account } from "@/lib/account";
@@ -123,8 +123,16 @@ export function RideForm({
   const set = (patch: Partial<RideFormValues>) => setV((cur) => ({ ...cur, ...patch }));
   const setPoint = (i: number, p: Point | null) => set({ points: v.points.map((x, j) => (j === i ? p : x)) });
   const route = v.points.filter((p): p is Point => !!p);
+  // Today's petrol price (OGRA's daily notice), for the suggestion below.
+  const [petrol, setPetrol] = useState<{ price: number; effective: string | null }>({ price: PETROL_PRICE, effective: null });
+  useEffect(() => {
+    fetch("/api/petrol")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p) => p?.price && setPetrol({ price: p.price, effective: p.effective ?? null }))
+      .catch(() => {});
+  }, []);
   // Suggested fuel-share fare once the route has a start and an end (lib/fare.ts); the server enforces the cap.
-  const guide = route.length >= 2 ? fareGuide(route) : null;
+  const guide = route.length >= 2 ? fareGuide(route, petrol.price) : null;
   const tooHigh = !!guide && v.fare.trim() !== "" && Number(v.fare) > guide.max;
 
   async function submit(e: React.FormEvent) {
@@ -351,7 +359,7 @@ export function RideForm({
             {guide && (
               <p id="fare-guide" className={`mt-1 text-xs ${tooHigh ? "font-semibold text-red-600" : "text-slate-500"}`}>
                 {tooHigh ? `Too high: at most Rs. ${guide.max} a seat for this route. ` : ""}
-                Fuel share for about {guide.km} km: <b>Rs. {guide.suggested}</b> a seat (petrol Rs. {PETROL_PRICE}/litre).{" "}
+                Fuel share for about {guide.km} km: <b>Rs. {guide.suggested}</b> a seat (petrol Rs. {petrol.price}/litre{petrol.effective ? `, OGRA ${formatDate(petrol.effective)}` : ""}).{" "}
                 {String(guide.suggested) !== v.fare.trim() && (
                   <button type="button" className="font-semibold text-brand underline" onClick={() => set({ fare: String(guide.suggested) })}>
                     Use Rs. {guide.suggested}

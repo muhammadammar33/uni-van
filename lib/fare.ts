@@ -6,7 +6,8 @@ import { distanceKm, type LatLng } from "./geo";
  * Keeping fares at cost-sharing level keeps Hamsafar a carpool, not a ride-hailing service, and keeps seats
  * cheaper than riding alone.
  *
- * NEXT_PUBLIC_PETROL_PRICE: petrol, PKR a litre (update it when the price changes; it's read at build time).
+ * The petrol price comes from OGRA's daily notice (lib/petrol.ts); NEXT_PUBLIC_PETROL_PRICE (PKR a litre) is
+ * only the fallback until the first notice has been read.
  */
 export const PETROL_PRICE = Math.max(100, Number(process.env.NEXT_PUBLIC_PETROL_PRICE) || 340);
 /** A typical small car in city and highway driving. */
@@ -28,9 +29,9 @@ export function routeKm(points: LatLng[]) {
 }
 
 /** Suggested and highest fare per seat for a route (whole rupees, multiples of 10). */
-export function fareGuide(points: LatLng[]) {
+export function fareGuide(points: LatLng[], petrolPrice = PETROL_PRICE) {
   const km = routeKm(points);
-  const perSeatKm = PETROL_PRICE / KM_PER_LITRE / SHARED_BY;
+  const perSeatKm = petrolPrice / KM_PER_LITRE / SHARED_BY;
   const suggested = Math.max(50, roundTo10(km * perSeatKm));
   const max = Math.max(100, Math.ceil((suggested * MAX_FACTOR) / 10) * 10);
   return { km: Math.round(km), perSeatKm: Math.round(perSeatKm * 10) / 10, suggested, max };
