@@ -33,8 +33,31 @@ export async function currentPetrolPrice(): Promise<PetrolPrice> {
   return { price: PETROL_PRICE, effective: null, source: "default", fetchedAt: null };
 }
 
+type Outcome = { ok: boolean; price?: number; effective?: string; note?: string };
+
+/** The last attempt's outcome, kept so a failure can be seen (no secrets in it). */
+export async function lastPetrolTry(): Promise<(Outcome & { at: string }) | null> {
+  try {
+    const [row] = await requireDb().select().from(s.appSettings).where(eq(s.appSettings.key, `${KEY}_last_try`));
+    return row ? JSON.parse(row.value) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Reads OGRA's newest notice and saves its petrol price. Returns what happened (for the daily job's log). */
-export async function refreshPetrolPrice(): Promise<{ ok: boolean; price?: number; effective?: string; note?: string }> {
+export async function refreshPetrolPrice(): Promise<Outcome> {
+  const out = await readOgra();
+  const value = JSON.stringify({ ...out, at: new Date().toISOString() });
+  await requireDb()
+    .insert(s.appSettings)
+    .values({ key: `${KEY}_last_try`, value })
+    .onConflictDoUpdate({ target: s.appSettings.key, set: { value } })
+    .catch(() => {});
+  return out;
+}
+
+async function readOgra(): Promise<Outcome> {
   const headers = { "user-agent": "Mozilla/5.0 (compatible; HamsafarBot/1.0)" };
   try {
     const list = await fetch(LIST_URL, { headers, cache: "no-store", signal: AbortSignal.timeout(20_000) });
@@ -60,6 +83,7 @@ export async function refreshPetrolPrice(): Promise<{ ok: boolean; price?: numbe
     return { ok: true, price, effective: notice.effective };
   } catch (err) {
     logError("petrol price refresh", err);
-    return { ok: false, note: "Couldn't reach OGRA" };
+    const e = err as { name?: string; message?: string };
+    return { ok: false, note: `Couldn't read OGRA: ${e?.name ?? "Error"} ${String(e?.message ?? "").slice(0, 160)}` };
   }
 }

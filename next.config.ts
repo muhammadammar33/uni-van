@@ -42,6 +42,8 @@ const otherHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // The PDF reader (OGRA petrol price notices) loads its own pdf.js files: keep it out of the bundle.
+  serverExternalPackages: ["unpdf"],
   // Don't let `next dev` write AGENTS.md / CLAUDE.md into the repo.
   agentRules: false,
   poweredByHeader: false,

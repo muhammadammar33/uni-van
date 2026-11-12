@@ -10,6 +10,8 @@ import { refreshPetrolPrice } from "@/lib/petrol";
  * Daily clean-up, run by Vercel Cron (vercel.json): ID photos past their keep time, and old chat messages.
  * Vercel sends `Authorization: Bearer <CRON_SECRET>`; without CRON_SECRET set, nothing runs.
  */
+export const maxDuration = 60;
+
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new NextResponse("Not allowed", { status: 401 });
