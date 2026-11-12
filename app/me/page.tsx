@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, BadgeCheck, Car, LogOut, Phone, Plus, Ticket } from "lucide-react";
+import { ArrowRight, BadgeCheck, BellRing, Car, LogOut, Phone, Plus, Ticket } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { DeleteAccount } from "@/components/DeleteAccount";
 import { currentUser, myTrips, setupNeeded } from "@/lib/account";
 import { displayPhone, formatDate, formatTime, todayLocal } from "@/lib/format";
 import { identityByPhone } from "@/lib/identity";
 import { describeSchedule } from "@/lib/schedule";
+import { myRouteAlerts } from "@/lib/routeAlerts";
+import { removeRouteAlert } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "My account", robots: { index: false } };
@@ -24,7 +26,7 @@ const ID_LABEL: Record<string, string> = { none: "Not sent yet", pending: "Being
 export default async function MePage() {
   const u = await currentUser();
   if (!u) redirect("/signin?next=/me");
-  const [{ rides, bookings }, ident, unfinished] = await Promise.all([myTrips(u), u.phone ? identityByPhone(u.phone) : null, setupNeeded(u)]);
+  const [{ rides, bookings }, ident, unfinished, alerts] = await Promise.all([myTrips(u), u.phone ? identityByPhone(u.phone) : null, setupNeeded(u), myRouteAlerts(u.id)]);
   const today = todayLocal();
   return (
     <div className="min-h-dvh pb-16">
@@ -153,6 +155,29 @@ export default async function MePage() {
             </ul>
           )}
         </section>
+
+        {alerts.length > 0 && (
+          <section className="card">
+            <h2 className="flex items-center gap-2 font-bold">
+              <BellRing className="size-5 text-brand" /> Route alerts
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">You’ll get a notification in the app when a ride is offered on these routes.</p>
+            <ul className="mt-3 divide-y divide-slate-100">
+              {alerts.map((a) => (
+                <li key={a.id} className="flex items-center gap-3 py-2 text-sm">
+                  <span className="min-w-0 flex-1">
+                    <b>{a.fromName}</b> → <b>{a.toName}</b>
+                    <span className="block text-xs text-slate-500">Until {formatDate(a.expiresAt.toISOString().slice(0, 10))}</span>
+                  </span>
+                  <form action={removeRouteAlert}>
+                    <input type="hidden" name="id" value={a.id} />
+                    <button className="btn-ghost !py-1.5 text-xs">Stop</button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <form action="/api/auth/logout" method="post">
           <button className="btn-ghost w-full">

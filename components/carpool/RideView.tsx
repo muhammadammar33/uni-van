@@ -12,7 +12,7 @@ import { ShareTrip } from "@/components/carpool/ShareTrip";
 import { BoardCheck } from "@/components/carpool/BoardCheck";
 import { useMyLocation } from "@/components/carpool/useMyLocation";
 import { GenderIcon } from "@/components/SeatMap";
-import { displayPhone, formatDate, formatFare, formatTime, normalizePhone, todayLocal } from "@/lib/format";
+import { displayPhone, formatDate, formatFare, formatTime, normalizePhone, todayLocal, formatMonth } from "@/lib/format";
 import { distanceKm, formatKm, nearestIndex } from "@/lib/geo";
 import type { Gender } from "@/lib/layout";
 import type { BookingLookup, LivePosition, PublicRide, RideBookingView, RiderReview } from "@/lib/rides";
@@ -22,6 +22,7 @@ import { addDays, describeSchedule } from "@/lib/schedule";
 import type { VerifyMode } from "@/lib/verify";
 import { ChatButton } from "@/components/carpool/RideChat";
 import { useAutoRefresh } from "@/components/useAutoRefresh";
+import { SosButton } from "@/components/carpool/SosButton";
 
 const PROFILE = "hamsafar:rider";
 const bookingKey = (slug: string) => `hamsafar:booking:${slug}`;
@@ -524,6 +525,11 @@ function Ticket({
             </a>
           </div>
           <ShareTrip booking={booking} slug={slug} verified={verified} />
+          <SosButton
+            slug={slug}
+            role="rider"
+            trip={[`Driver: ${booking.driverName}${verified ? " (ID verified)" : ""}`, `Car: ${booking.car}${booking.plate ? ` · ${booking.plate}` : ""}`, `Trip: ${booking.pickup} → ${booking.drop}, ${formatDate(booking.date)} at ${formatTime(booking.departTime)}`]}
+          />
         </div>
       </dl>
       <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3">
@@ -554,7 +560,7 @@ function Reviews({ ride }: { ride: PublicRide }) {
           {said.slice(0, 4).map((r, i) => (
             <li key={i} className="text-slate-600">
               <span className="flex items-center gap-1.5 text-xs text-slate-400">
-                <Stars value={r.stars} className="size-3" /> {r.name} · {formatDate(r.date)}
+                <Stars value={r.stars} className="size-3" /> {r.name} · {formatMonth(r.date)}
               </span>
               <span className="[overflow-wrap:anywhere]">{r.comment}</span>
             </li>

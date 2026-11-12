@@ -6,6 +6,8 @@ import { formatDate, formatTime, nowLocal } from "@/lib/format";
 import { addDays } from "@/lib/schedule";
 import { isPhoneBlocked } from "@/lib/people";
 import { pushLater } from "@/lib/push";
+import { alertAdmins } from "@/lib/notify";
+import { after } from "next/server";
 import { take } from "@/lib/rateLimit";
 import { BookingError } from "@/lib/trips";
 
@@ -227,6 +229,7 @@ export async function reportChat(bookingId: number, key: string, reasonRaw: unkn
     rideSlug: c.ride.slug,
   });
   await db.update(s.rideBookings).set({ chatClosedBy: c.side }).where(and(eq(s.rideBookings.id, bookingId), sql`${s.rideBookings.chatClosedBy} is null`));
+  after(() => alertAdmins("Chat reported", `The ${c.side} reported the ${other(c.side)}: ${reason.slice(0, 100)}`, "/admin/feedback", "hamsafar-safety"));
 }
 
 /** Unread messages from riders, per booking, for the driver's page. */

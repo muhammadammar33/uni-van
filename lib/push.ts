@@ -64,16 +64,27 @@ export type PushMessage = { title: string; body: string; url: string; tag?: stri
 
 /** Sends to every app the people with these numbers are signed in to. Returns how many phones got it. */
 export async function pushToPhones(phones: string[], msg: PushMessage): Promise<number> {
-  const a = account();
   const list = [...new Set(phones.filter(Boolean))];
-  if (!a || !list.length) return 0;
-  const db = requireDb();
-  const devices = await db
+  if (!account() || !list.length) return 0;
+  const devices = await requireDb()
     .select({ token: s.deviceTokens.token })
     .from(s.deviceTokens)
     .innerJoin(s.users, eq(s.users.id, s.deviceTokens.userId))
     .where(inArray(s.users.phone, list));
-  if (!devices.length) return 0;
+  return sendToDevices(devices, msg);
+}
+
+/** Sends to every app these accounts are signed in to. */
+export async function pushToUsers(userIds: number[], msg: PushMessage): Promise<number> {
+  const list = [...new Set(userIds)];
+  if (!account() || !list.length) return 0;
+  const devices = await requireDb().select({ token: s.deviceTokens.token }).from(s.deviceTokens).where(inArray(s.deviceTokens.userId, list));
+  return sendToDevices(devices, msg);
+}
+
+async function sendToDevices(devices: { token: string }[], msg: PushMessage): Promise<number> {
+  const a = account();
+  if (!a || !devices.length) return 0;
   const bearer = await accessToken(a);
   let sent = 0;
   await Promise.all(

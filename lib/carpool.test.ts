@@ -61,3 +61,17 @@ test("a ride counts as done an hour after it leaves (then riders can rate it)", 
   assert.equal(runOver("2026-10-14", "07:30", "2026-10-14T08:30"), true, "an hour after leaving");
   assert.equal(runOver("2026-10-14", "23:30", "2026-10-15T00:10"), true, "late ride, next day");
 });
+
+test("fare guide: fuel share, rounded, capped at 1.5x", async () => {
+  const { fareGuide } = await import("./fare");
+  const saddar = { lat: 33.5973, lng: 73.0479 }, f6 = { lat: 33.7294, lng: 73.0771 };
+  const g = fareGuide([saddar, f6]);
+  assert.ok(g.km > 15 && g.km < 22, `km ${g.km}`);
+  assert.equal(g.suggested % 10, 0);
+  assert.ok(g.suggested >= 100 && g.suggested <= 200, `suggested ${g.suggested}`);
+  assert.ok(g.max >= g.suggested * 1.5 && g.max < g.suggested * 1.5 + 10);
+  const isl = { lat: 33.6844, lng: 73.0479 }, lhr = { lat: 31.5204, lng: 74.3587 };
+  const ig = fareGuide([isl, lhr]);
+  assert.ok(ig.suggested > 2000 && ig.suggested < 4000, `intercity ${ig.suggested}`);
+  assert.equal(fareGuide([saddar, { lat: 33.598, lng: 73.048 }]).suggested, 50);
+});

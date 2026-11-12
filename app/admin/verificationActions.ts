@@ -8,6 +8,7 @@ import { approveIdentity, deleteIdentity, purgeReviewedPhotos, rejectIdentity } 
 import { sendTemplate, waConfig } from "@/lib/whatsapp";
 import { logError } from "@/lib/api";
 import { pushLater, pushToPhones } from "@/lib/push";
+import { notifyRouteAlerts } from "@/lib/routeAlerts";
 
 const idOf = (fd: FormData) => Number(fd.get("id")) || 0;
 
@@ -19,6 +20,8 @@ async function tellPerson(phone: string, template: string | undefined, name: str
 export async function approveId(fd: FormData) {
   const admin = await requireSuper();
   const r = await approveIdentity(idOf(fd), admin.id);
+  // Rides that just went live: riders waiting for those routes hear about them.
+  if (r.liveRideIds.length) after(() => notifyRouteAlerts(r.liveRideIds));
   // Also clears photos of IDs reviewed long enough ago (in case the daily job didn't run).
   after(() => purgeReviewedPhotos().catch((err) => logError("purge photos", err)));
   // A free push notification when they have the app; a (paid) WhatsApp message only when they don't.

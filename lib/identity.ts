@@ -407,7 +407,7 @@ export async function approveIdentity(id: number, adminId: number) {
           .where(and(eq(s.rides.driverPhone, i.phone), eq(s.rides.status, "pending")))
           .returning({ id: s.rides.id })
       : [];
-    return { phone: i.phone, name: i.fullName, ridesLive: live.length, driver };
+    return { phone: i.phone, name: i.fullName, ridesLive: live.length, liveRideIds: live.map((r) => r.id), driver };
   });
 }
 

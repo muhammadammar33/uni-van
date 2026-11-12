@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CircleCheckBig, Flag, KeyRound, Lock, Navigation, Play, UserX } from "lucide-react";
 import type { ManageData } from "@/lib/rides";
 import { useAutoRefresh } from "@/components/useAutoRefresh";
+import { SosButton } from "@/components/carpool/SosButton";
 
 /**
  * Today's trip for the driver: pickup by pickup, who's on board. The driver can only start the ride from a
@@ -73,6 +74,11 @@ export function TripPanel({
       <h2 id="trip-title" className="flex items-center gap-2 font-bold">
         <Flag className="size-5 text-brand" /> Today&apos;s trip
       </h2>
+      <SosButton
+        slug={data.ride.slug}
+        role="driver"
+        trip={[`Driver: ${data.ride.driverName}`, `Car: ${data.ride.car}${data.ride.plate ? ` · ${data.ride.plate}` : ""}`, `Route: ${points[0]?.name} → ${points[points.length - 1]?.name}`]}
+      />
       {left.map((i) => (
         <p key={i} className="flex items-center gap-2 text-sm text-slate-500">
           <CircleCheckBig className="size-4 text-emerald-600" /> Left {points[i].name}

@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import { createHmac, randomBytes, randomInt } from "node:crypto";
 import { and, asc, desc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -15,6 +16,8 @@ import { nextRuns, runOver, runsOn, type Schedule } from "@/lib/schedule";
 import { pushLater } from "@/lib/push";
 import { formatDate } from "@/lib/format";
 import { chatKey, driverUnread } from "@/lib/chat";
+import { fareGuide, PETROL_PRICE } from "@/lib/fare";
+import { notifyRouteAlerts } from "@/lib/routeAlerts";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const newCode = () => Array.from({ length: 4 }, () => CODE_CHARS[randomInt(CODE_CHARS.length)]).join("");
@@ -65,6 +68,14 @@ function readRide(raw: unknown) {
     if (out) throw new BookingError(`"${out.name}" is outside the city area. City rides are within Islamabad, Rawalpindi, Wah, Taxila and Rawat. For other cities, choose "Between cities".`);
   } else if (r.points.every(inCityArea)) {
     throw new BookingError(`This whole route is inside Islamabad, Rawalpindi, Wah, Taxila and Rawat. Choose "In the city" instead.`);
+  }
+  // Fares share the fuel cost (lib/fare.ts): no more than half again above the suggested fare.
+  if (typeof r.fare === "number" && r.fare > 0) {
+    const g = fareGuide(r.points);
+    if (r.fare > g.max)
+      throw new BookingError(
+        `Hamsafar fares share the cost of fuel: for this route (about ${g.km} km) the most you can ask is Rs. ${g.max} a seat. The suggested fare is Rs. ${g.suggested} (petrol at Rs. ${PETROL_PRICE} a litre).`,
+      );
   }
   return {
     ride: {
@@ -117,14 +128,26 @@ export async function createRide(raw: unknown, user: s.User | null) {
   // Women-only rides rely on this, so it comes from the ID, not the form.
   ride.driverGender = gender;
   const db = requireDb();
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     const [row] = await tx
       .insert(s.rides)
       .values({ ...ride, status, userId: user?.id ?? null, slug: randomBytes(5).toString("base64url"), manageToken: randomBytes(16).toString("base64url") })
       .returning();
     await tx.insert(s.ridePoints).values(points.map((p, idx) => ({ rideId: row.id, idx, name: p.name, lat: p.lat, lng: p.lng, placeKey: p.key ?? null })));
-    return { slug: row.slug, manageToken: row.manageToken, status };
+    return { slug: row.slug, manageToken: row.manageToken, status, id: row.id };
   });
+  // Riders waiting for this route hear about it (only once it's live; pending rides notify on ID approval).
+  if (created.status === "active") notifyLater([created.id]);
+  return { slug: created.slug, manageToken: created.manageToken, status: created.status };
+}
+
+function notifyLater(rideIds: number[]) {
+  const run = () => notifyRouteAlerts(rideIds);
+  try {
+    after(run);
+  } catch {
+    void run();
+  }
 }
 
 /** Replaces a ride's details and route (only while nobody has booked a future date at a removed stop). */
@@ -270,12 +293,19 @@ function toPublic(r: s.Ride, points: s.RidePoint[], taken: Map<string, number>, 
 }
 
 /** Average stars per driver phone, leaving out reviews hidden by an admin. */
+/**
+ * Reviews are anonymous and appear only REVIEW_DELAY_HOURS after they're written (in the average too), so a
+ * driver can't tell which rider gave which rating and retaliate. The rider's own review shows to them at once.
+ */
+const REVIEW_DELAY_HOURS = 48;
+const reviewVisible = () => sql`${s.driverReviews.updatedAt} < now() - make_interval(hours => ${REVIEW_DELAY_HOURS})`;
+
 async function ratingsFor(phones: string[]) {
   if (!phones.length) return new Map<string, DriverRating>();
   const rows = await requireDb()
     .select({ phone: s.driverReviews.driverPhone, avg: sql<number>`avg(${s.driverReviews.stars})::float`, count: sql<number>`count(*)::int` })
     .from(s.driverReviews)
-    .where(and(inArray(s.driverReviews.driverPhone, [...new Set(phones)]), eq(s.driverReviews.hidden, false)))
+    .where(and(inArray(s.driverReviews.driverPhone, [...new Set(phones)]), eq(s.driverReviews.hidden, false), reviewVisible()))
     .groupBy(s.driverReviews.driverPhone);
   return new Map(rows.map((r) => [r.phone, { avg: Math.round(r.avg * 10) / 10, count: r.count }]));
 }
@@ -284,10 +314,11 @@ async function reviewsFor(phone: string, limit = 6): Promise<PublicReview[]> {
   const rows = await requireDb()
     .select()
     .from(s.driverReviews)
-    .where(and(eq(s.driverReviews.driverPhone, phone), eq(s.driverReviews.hidden, false)))
+    .where(and(eq(s.driverReviews.driverPhone, phone), eq(s.driverReviews.hidden, false), reviewVisible()))
     .orderBy(desc(s.driverReviews.updatedAt))
     .limit(limit);
-  return rows.map((r) => ({ name: r.riderName, stars: r.stars, comment: r.comment, date: r.updatedAt.toISOString().slice(0, 10) }));
+  // No name and only the month: enough to judge a driver, not enough to identify the rider.
+  return rows.map((r) => ({ name: "Verified rider", stars: r.stars, comment: r.comment, date: r.updatedAt.toISOString().slice(0, 7) }));
 }
 
 async function pointsFor(rideIds: number[]) {
@@ -430,7 +461,7 @@ function bookingView(r: s.Ride, pts: s.RidePoint[], b: s.RideBooking): RideBooki
     pickup: pts[b.pickupIdx]?.name ?? "",
     drop: pts[b.dropIdx]?.name ?? "",
     departTime: r.departTime,
-    fare: r.fare === null ? null : r.fare * b.seats,
+    fare: (b.fare ?? r.fare) === null ? null : (b.fare ?? r.fare)! * b.seats,
     driverPhone: r.driverPhone,
     driverName: r.driverName,
     car: r.car,
@@ -476,7 +507,7 @@ export async function bookRide(slug: string, raw: unknown, user: s.User | null):
     if (input.seats > left) throw new BookingError(left === 0 ? "This ride is full on that day." : `Only ${left} seat${left === 1 ? "" : "s"} left on that day.`, 409);
     const [b] = await tx
       .insert(s.rideBookings)
-      .values({ rideId: r.id, userId: user?.id ?? null, date: input.date, name: input.name, phone, gender: input.gender, seats: input.seats, pickupIdx: input.pickupIdx, dropIdx: input.dropIdx, code: newCode() })
+      .values({ rideId: r.id, userId: user?.id ?? null, date: input.date, name: input.name, phone, gender: input.gender, seats: input.seats, pickupIdx: input.pickupIdx, dropIdx: input.dropIdx, fare: r.fare, code: newCode() })
       .returning();
     pushLater([r.driverPhone], {
       title: "New booking",

@@ -18,6 +18,8 @@ type View = {
 };
 
 const MAX = 500;
+/** Messages that look like a request for money before the ride (the most common carpool scam): a warning shows. */
+const ASKS_FOR_MONEY = /\b(advance|pehle\s*paise|paise\s*pehle|paise\s*bhej|send\s*(the\s*)?(money|payment|fare)|jazz\s*cash|easy\s*paisa|raast|iban|account\s*(no|number)|bank\s*transfer|transfer\s*(karo|kar\s*dein|the))\b/i;
 /** How often an open chat checks for new messages, and how often a closed one checks the unread count. */
 const OPEN_POLL_MS = 5000;
 const PEEK_POLL_MS = 60_000;
@@ -241,6 +243,11 @@ export function ChatSheet({ chat, onClose }: { chat: { id: number; key: string }
                 <div className={`flex ${m.mine ? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-[15px] ${m.mine ? "rounded-br-md bg-brand text-white" : "rounded-bl-md bg-white text-ink shadow-sm"}`}>
                     {m.body}
+                    {!m.mine && ASKS_FOR_MONEY.test(m.body) && (
+                      <span className="mt-1.5 block rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">
+                        ⚠️ Pay the driver after the ride, never in advance. If you’re asked to send money first, report it.
+                      </span>
+                    )}
                     <div className={`mt-0.5 flex items-center justify-end gap-1 text-[10px] ${m.mine ? "text-teal-50/80" : "text-slate-400"}`}>
                       {time(m.at)}
                       {m.mine && (view && m.id <= view.seenUpTo ? <CheckCheck className="size-3.5" aria-label="Seen" /> : <Check className="size-3.5" aria-label="Sent" />)}
@@ -321,6 +328,9 @@ export function ChatSheet({ chat, onClose }: { chat: { id: number; key: string }
   );
 }
 
+/** Common reasons, one tap each (the most common scam first: asking for money before the ride). */
+const REPORT_REASONS = ["Asked for money in advance", "Harassment or abuse", "Wrong car or driver", "Asked for more than the fare", "Unsafe driving", "Other"];
+
 function ReportDialog({ other, onCancel, onSend }: { other: string; onCancel: () => void; onSend: (reason: string) => Promise<void> }) {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -348,6 +358,13 @@ function ReportDialog({ other, onCancel, onSend }: { other: string; onCancel: ()
         <p className="text-sm text-slate-600">
           The Hamsafar team will get a copy of this conversation and look into it. The chat will be closed. If you&apos;re in danger, call <b>15</b>.
         </p>
+        <div className="flex flex-wrap gap-1.5">
+          {REPORT_REASONS.map((r) => (
+            <button key={r} type="button" className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${reason.startsWith(r) ? "border-red-300 bg-red-50 text-red-700" : "border-slate-200 text-slate-600"}`} onClick={() => setReason((cur) => (cur.startsWith(r) ? cur : `${r}. ${cur.replace(/^[^.]*\. /, "")}`))}>
+              {r}
+            </button>
+          ))}
+        </div>
         <textarea className="input min-h-24" maxLength={1000} placeholder="What happened?" aria-label="What happened?" value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2">

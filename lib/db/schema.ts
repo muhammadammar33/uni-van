@@ -252,6 +252,8 @@ export const rideBookings = pgTable(
     seats: integer("seats").default(1).notNull(),
     pickupIdx: integer("pickup_idx").notNull(),
     dropIdx: integer("drop_idx").notNull(),
+    /** Fare per seat when booked (rupees; null = free / to agree): later fare changes don't apply to it. */
+    fare: integer("fare"),
     code: text("code").notNull(),
     /** When the rider typed the driver's ride code in the car (the right driver), or null. */
     boardedAt: timestamp("boarded_at", { withTimezone: true }),
@@ -596,3 +598,28 @@ export const chatMessages = pgTable(
   (t) => [index("chat_messages_booking_idx").on(t.bookingId, t.id), index("chat_messages_created_idx").on(t.createdAt)],
 );
 export type ChatMessage = typeof chatMessages.$inferSelect;
+
+/**
+ * "Notify me": a signed-in rider whose search found nothing asks to be told when a ride is offered on that
+ * route. Matched like a search (lib/rides.ts); the rider gets an app notification. Ends after ROUTE_ALERT_DAYS.
+ */
+export const routeAlerts = pgTable(
+  "route_alerts",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: rideKindEnum("kind").default("city").notNull(),
+    fromName: text("from_name").notNull(),
+    fromLat: doublePrecision("from_lat").notNull(),
+    fromLng: doublePrecision("from_lng").notNull(),
+    toName: text("to_name").notNull(),
+    toLat: doublePrecision("to_lat").notNull(),
+    toLng: doublePrecision("to_lng").notNull(),
+    createdAt,
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("route_alerts_user_idx").on(t.userId), index("route_alerts_kind_idx").on(t.kind, t.expiresAt)],
+);
+export type RouteAlert = typeof routeAlerts.$inferSelect;

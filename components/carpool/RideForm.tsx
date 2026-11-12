@@ -17,6 +17,7 @@ import type { RideKind } from "@/lib/cities";
 import type { Point } from "@/lib/places";
 import { WEEKDAYS } from "@/lib/schedule";
 import type { VerifyMode } from "@/lib/verify";
+import { fareGuide, PETROL_PRICE } from "@/lib/fare";
 
 export type RideFormValues = {
   /** In the city (Islamabad, Rawalpindi, Wah, Taxila, Rawat) or between cities. */
@@ -122,6 +123,9 @@ export function RideForm({
   const set = (patch: Partial<RideFormValues>) => setV((cur) => ({ ...cur, ...patch }));
   const setPoint = (i: number, p: Point | null) => set({ points: v.points.map((x, j) => (j === i ? p : x)) });
   const route = v.points.filter((p): p is Point => !!p);
+  // Suggested fuel-share fare once the route has a start and an end (lib/fare.ts); the server enforces the cap.
+  const guide = route.length >= 2 ? fareGuide(route) : null;
+  const tooHigh = !!guide && v.fare.trim() !== "" && Number(v.fare) > guide.max;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -332,7 +336,29 @@ export function RideForm({
             <label className="label" htmlFor="fare">
               Fare per seat (Rs.) <span className="font-normal text-slate-400">(empty = free / agree later)</span>
             </label>
-            <input id="fare" type="number" inputMode="numeric" min={0} className="input" value={v.fare} onChange={(e) => set({ fare: e.target.value })} placeholder="e.g. 250" />
+            <input
+              id="fare"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={guide?.max}
+              className="input"
+              value={v.fare}
+              onChange={(e) => set({ fare: e.target.value })}
+              placeholder={guide ? `e.g. ${guide.suggested}` : "e.g. 250"}
+              aria-describedby="fare-guide"
+            />
+            {guide && (
+              <p id="fare-guide" className={`mt-1 text-xs ${tooHigh ? "font-semibold text-red-600" : "text-slate-500"}`}>
+                {tooHigh ? `Too high: at most Rs. ${guide.max} a seat for this route. ` : ""}
+                Fuel share for about {guide.km} km: <b>Rs. {guide.suggested}</b> a seat (petrol Rs. {PETROL_PRICE}/litre).{" "}
+                {String(guide.suggested) !== v.fare.trim() && (
+                  <button type="button" className="font-semibold text-brand underline" onClick={() => set({ fare: String(guide.suggested) })}>
+                    Use Rs. {guide.suggested}
+                  </button>
+                )}
+              </p>
+            )}
           </div>
         </div>
         <div>

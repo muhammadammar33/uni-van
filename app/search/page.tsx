@@ -12,6 +12,9 @@ import { searchRides } from "@/lib/rides";
 import { after } from "next/server";
 import { trackSearch } from "@/lib/analytics";
 import { kindFor } from "@/lib/cities";
+import { RouteAlertButton } from "@/components/carpool/RouteAlertButton";
+import { currentUser } from "@/lib/account";
+import { ROUTE_ALERT_DAYS } from "@/lib/routeAlerts";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Find a ride" };
@@ -23,7 +26,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   const to = decodePoint(str("to"));
   const date = str("date") && /^\d{4}-\d{2}-\d{2}$/.test(str("date")!) ? str("date")! : null;
   const kind = kindFor(str("kind"), from, to);
-  const rides = await searchRides(from, to, date, kind);
+  const [rides, user] = await Promise.all([searchRides(from, to, date, kind), currentUser()]);
   // For the owner's analytics: which routes people look for, and which found nothing.
   if (from?.key && to?.key) after(() => trackSearch(from.name, to.name, kind, rides.length).catch(() => {}));
   const keep = (r: { pickupIdx: number; dropIdx: number }) => {
@@ -85,7 +88,8 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
             <div className="card text-center">
               <Car className="mx-auto size-10 text-slate-300" />
               <p className="mt-2 font-semibold">No rides on this route {date ? "that day" : "yet"}.</p>
-              <p className="mt-1 text-sm text-slate-600">Try another day, a nearby pickup point, or check back later: new rides are added all the time.</p>
+              <p className="mt-1 text-sm text-slate-600">Try another day or a nearby pickup point, or get notified as soon as someone offers this route.</p>
+              {from && to && <RouteAlertButton from={str("from")!} to={str("to")!} kind={kind} signedIn={!!user} days={ROUTE_ALERT_DAYS} />}
             </div>
           )}
         </div>

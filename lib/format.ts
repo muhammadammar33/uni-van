@@ -76,6 +76,12 @@ export function defaultTitle(direction: keyof typeof DIRECTION_LABEL, date: stri
 }
 
 /** "12 Oct" or "12 – 14 Oct" for multi-day trips. */
+/** "2026-11" -> "Nov 2026" (reviews show only the month). */
+export function formatMonth(ym: string): string {
+  const m = /^(\d{4})-(\d{2})/.exec(ym);
+  return m ? `${MONTHS[Number(m[2]) - 1].slice(0, 3)} ${m[1]}` : ym;
+}
+
 export function formatDateRange(start: string, end: string | null, long = false): string {
   if (!end || end === start) return formatDate(start, long);
   return `${formatDate(start)} – ${formatDate(end)}${long ? ` ${end.slice(0, 4)}` : ""}`;

@@ -14,7 +14,7 @@ import { useIdVerify, verifyBy } from "@/components/carpool/IdVerify";
 import { Stars } from "@/components/carpool/Stars";
 import { GenderIcon } from "@/components/SeatMap";
 import { ChatButton } from "@/components/carpool/RideChat";
-import { displayPhone, formatDate, formatFare, formatTime, todayLocal } from "@/lib/format";
+import { displayPhone, formatDate, formatFare, formatTime, todayLocal, formatMonth } from "@/lib/format";
 import type { ManageData } from "@/lib/rides";
 import type { VerifyMode } from "@/lib/verify";
 import { addDays, describeSchedule } from "@/lib/schedule";
@@ -389,7 +389,7 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
               {data.reviews.map((r, i) => (
                 <li key={i} className="py-2">
                   <span className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <Stars value={r.stars} className="size-3" /> {r.name} · {formatDate(r.date)}
+                    <Stars value={r.stars} className="size-3" /> {r.name} · {formatMonth(r.date)}
                   </span>
                   {r.comment ? <span className="text-slate-700 [overflow-wrap:anywhere]">{r.comment}</span> : <span className="text-slate-400">No comment</span>}
                 </li>
