@@ -3,10 +3,8 @@ name: Petrol price (OGRA)
 # Every day, read today's petrol price from OGRA's official notice and send it to the site (OGRA's firewall
 # turns away requests from Vercel). Needs repository secrets SITE_URL (https://hamsafar.website) and
 # CRON_SECRET (the same value as in Vercel); without them it only prints the price.
+# OGRA's firewall currently refuses GitHub's servers too (HTTP 403), so this runs only when started by hand.
 on:
-  schedule:
-    - cron: "17 21 * * *" # 02:17 in Pakistan
-    - cron: "17 7 * * *" # 12:17 in Pakistan (a notice published during the day)
   workflow_dispatch:
 
 permissions:

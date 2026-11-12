@@ -12,13 +12,13 @@ export const maxDuration = 60;
  */
 export async function GET() {
   const [p, last] = await Promise.all([currentPetrolPrice(), lastPetrolTry()]);
-  // Missed the daily job (or it never ran): read OGRA in the background, for the next visitor. Not more than
-  // once every 10 minutes while it keeps failing.
-  const stale = !p.fetchedAt || Date.now() - Date.parse(p.fetchedAt) > 30 * 3600_000;
-  const recentlyTried = last && Date.now() - Date.parse(last.at) < 10 * 60_000;
+  // Older than a day: try reading OGRA in the background (its firewall often refuses servers; an admin then
+  // enters the price on /admin/petrol). Not more than every 6 hours.
+  const stale = !p.fetchedAt || Date.now() - Date.parse(p.fetchedAt) > 26 * 3600_000;
+  const recentlyTried = last && Date.now() - Date.parse(last.at) < 6 * 3600_000;
   if (stale && !recentlyTried) after(() => refreshPetrolPrice().then(() => {}));
   return handle(async () => ({ price: p.price, effective: p.effective, source: p.source, lastTry: last ? { at: last.at, ok: last.ok, note: last.note ?? null } : null }), {
-    sharedCacheSeconds: p.source === "ogra" ? 3600 : 60,
+    sharedCacheSeconds: p.source === "default" ? 60 : 600,
   });
 }
 

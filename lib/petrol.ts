@@ -18,7 +18,7 @@ const MIN = 150;
 const MAX = 800;
 const MAX_JUMP = 0.25;
 
-export type PetrolPrice = { price: number; effective: string | null; source: "ogra" | "default"; fetchedAt: string | null };
+export type PetrolPrice = { price: number; effective: string | null; source: "ogra" | "manual" | "default"; fetchedAt: string | null };
 
 export async function currentPetrolPrice(): Promise<PetrolPrice> {
   try {
@@ -39,14 +39,16 @@ type Outcome = { ok: boolean; price?: number; effective?: string; note?: string 
  * Saves a price read from an OGRA notice (by the site itself, or by the daily GitHub Actions job when OGRA's
  * firewall turns the site away), after the same checks: a sane range, and no jump of more than MAX_JUMP.
  */
-export async function savePetrolPrice(price: number | null, effective: string): Promise<Outcome> {
+export async function savePetrolPrice(price: number | null, effective: string, by: "ogra" | "manual" = "ogra"): Promise<Outcome> {
   if (!price || !Number.isFinite(price) || price < MIN || price > MAX) return { ok: false, note: `Unreadable or out-of-range petrol price (${price})` };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(effective)) return { ok: false, note: "Bad effective date" };
   const before = await currentPetrolPrice();
-  if (before.source === "ogra" && before.effective && effective < before.effective) return { ok: true, price: before.price, effective: before.effective, note: "Older notice: kept the newer price" };
-  if (before.source === "ogra" && Math.abs(price - before.price) / before.price > MAX_JUMP)
+  // An admin's entry is trusted as typed (in range); automatic readings must not go back in time or jump.
+  if (by === "ogra" && before.source !== "default" && before.effective && effective < before.effective)
+    return { ok: true, price: before.price, effective: before.effective, note: "Older notice: kept the newer price" };
+  if (by === "ogra" && before.source !== "default" && Math.abs(price - before.price) / before.price > MAX_JUMP)
     return { ok: false, note: `Price jumped from ${before.price} to ${price}: kept the old one, please check` };
-  const value: PetrolPrice = { price, effective, source: "ogra", fetchedAt: new Date().toISOString() };
+  const value: PetrolPrice = { price, effective, source: by, fetchedAt: new Date().toISOString() };
   await requireDb()
     .insert(s.appSettings)
     .values({ key: KEY, value: JSON.stringify(value) })
@@ -84,7 +86,7 @@ async function readOgra(): Promise<Outcome> {
     const notice = parseNoticeList(await list.text());
     if (!notice) return { ok: false, note: "No price notice found on OGRA's page" };
     const before = await currentPetrolPrice();
-    if (before.source === "ogra" && before.effective === notice.effective) return { ok: true, price: before.price, effective: before.effective, note: "Already up to date" };
+    if (before.source !== "default" && before.effective === notice.effective) return { ok: true, price: before.price, effective: before.effective, note: "Already up to date" };
     const pdf = await fetch(notice.url, { headers, cache: "no-store", signal: AbortSignal.timeout(30_000) });
     if (!pdf.ok) return { ok: false, note: `OGRA notice HTTP ${pdf.status}` };
     const { extractText, getDocumentProxy } = await import("unpdf");
