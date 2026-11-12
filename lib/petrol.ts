@@ -35,6 +35,25 @@ export async function currentPetrolPrice(): Promise<PetrolPrice> {
 
 type Outcome = { ok: boolean; price?: number; effective?: string; note?: string };
 
+/**
+ * Saves a price read from an OGRA notice (by the site itself, or by the daily GitHub Actions job when OGRA's
+ * firewall turns the site away), after the same checks: a sane range, and no jump of more than MAX_JUMP.
+ */
+export async function savePetrolPrice(price: number | null, effective: string): Promise<Outcome> {
+  if (!price || !Number.isFinite(price) || price < MIN || price > MAX) return { ok: false, note: `Unreadable or out-of-range petrol price (${price})` };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(effective)) return { ok: false, note: "Bad effective date" };
+  const before = await currentPetrolPrice();
+  if (before.source === "ogra" && before.effective && effective < before.effective) return { ok: true, price: before.price, effective: before.effective, note: "Older notice: kept the newer price" };
+  if (before.source === "ogra" && Math.abs(price - before.price) / before.price > MAX_JUMP)
+    return { ok: false, note: `Price jumped from ${before.price} to ${price}: kept the old one, please check` };
+  const value: PetrolPrice = { price, effective, source: "ogra", fetchedAt: new Date().toISOString() };
+  await requireDb()
+    .insert(s.appSettings)
+    .values({ key: KEY, value: JSON.stringify(value) })
+    .onConflictDoUpdate({ target: s.appSettings.key, set: { value: JSON.stringify(value) } });
+  return { ok: true, price, effective };
+}
+
 /** The last attempt's outcome, kept so a failure can be seen (no secrets in it). */
 export async function lastPetrolTry(): Promise<(Outcome & { at: string }) | null> {
   try {
@@ -71,16 +90,7 @@ async function readOgra(): Promise<Outcome> {
     const { extractText, getDocumentProxy } = await import("unpdf");
     const doc = await getDocumentProxy(new Uint8Array(await pdf.arrayBuffer()));
     const { text } = await extractText(doc, { mergePages: true });
-    const price = parsePetrolPrice(text);
-    if (!price || price < MIN || price > MAX) return { ok: false, note: `Unreadable or out-of-range petrol price (${price})` };
-    if (before.source === "ogra" && Math.abs(price - before.price) / before.price > MAX_JUMP)
-      return { ok: false, note: `Price jumped from ${before.price} to ${price}: kept the old one, please check` };
-    const value: PetrolPrice = { price, effective: notice.effective, source: "ogra", fetchedAt: new Date().toISOString() };
-    await requireDb()
-      .insert(s.appSettings)
-      .values({ key: KEY, value: JSON.stringify(value) })
-      .onConflictDoUpdate({ target: s.appSettings.key, set: { value: JSON.stringify(value) } });
-    return { ok: true, price, effective: notice.effective };
+    return savePetrolPrice(parsePetrolPrice(text), notice.effective);
   } catch (err) {
     logError("petrol price refresh", err);
     const e = err as { name?: string; message?: string };

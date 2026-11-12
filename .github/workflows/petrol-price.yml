@@ -1,0 +1,36 @@
+name: Petrol price (OGRA)
+
+# Every day, read today's petrol price from OGRA's official notice and send it to the site (OGRA's firewall
+# turns away requests from Vercel). Needs repository secrets SITE_URL (https://hamsafar.website) and
+# CRON_SECRET (the same value as in Vercel); without them it only prints the price.
+on:
+  schedule:
+    - cron: "17 21 * * *" # 02:17 in Pakistan
+    - cron: "17 7 * * *" # 12:17 in Pakistan (a notice published during the day)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  petrol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/ogra-petrol.ts
+            lib/ograParse.ts
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read OGRA's notice and send the price
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          npm init -y >/dev/null
+          npm install --no-save --no-audit --no-fund unpdf@2 tsx@4 >/dev/null
+          npx tsx scripts/ogra-petrol.ts

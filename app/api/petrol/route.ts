@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { handle } from "@/lib/api";
-import { currentPetrolPrice, lastPetrolTry, refreshPetrolPrice } from "@/lib/petrol";
+import { currentPetrolPrice, lastPetrolTry, refreshPetrolPrice, savePetrolPrice } from "@/lib/petrol";
 
 /** Reading OGRA's PDF can take a while: allow it time when it runs after a response. */
 export const maxDuration = 60;
@@ -20,4 +20,18 @@ export async function GET() {
   return handle(async () => ({ price: p.price, effective: p.effective, source: p.source, lastTry: last ? { at: last.at, ok: last.ok, note: last.note ?? null } : null }), {
     sharedCacheSeconds: p.source === "ogra" ? 3600 : 60,
   });
+}
+
+/**
+ * The daily GitHub Actions job (scripts/ogra-petrol.ts) sends what it read from OGRA: { price, effective, url },
+ * with `Authorization: Bearer <CRON_SECRET>`. The same checks apply as when the site reads OGRA itself.
+ */
+export async function POST(req: Request) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new Response("Not allowed", { status: 401 });
+  const body = (await req.json().catch(() => ({}))) as { price?: unknown; effective?: unknown; url?: unknown };
+  if (typeof body.url !== "string" || !/^https:\/\/www\.ogra\.org\.pk\/download\/\d+\?lang=en$/.test(body.url))
+    return Response.json({ ok: false, note: "Not an OGRA notice link" }, { status: 400 });
+  const out = await savePetrolPrice(Number(body.price), String(body.effective ?? ""));
+  return Response.json(out, { status: out.ok ? 200 : 422, headers: { "cache-control": "no-store" } });
 }
