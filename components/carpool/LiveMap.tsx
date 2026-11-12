@@ -5,8 +5,9 @@ import { Eye, EyeOff, LocateFixed, Radio } from "lucide-react";
 import { MapView, type MapMarker } from "@/components/carpool/MapView";
 import { deviceId, useMyLocation } from "@/components/carpool/useMyLocation";
 import type { LivePosition } from "@/lib/rides";
+import { useAutoRefresh } from "@/components/useAutoRefresh";
 
-const POLL_MS = 15_000;
+const POLL_MS = 30_000;
 
 /**
  * Everyone sharing their location right now: drivers on their way (with their ride) and riders waiting
@@ -29,9 +30,8 @@ export function LiveMap() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- first load of live data
     load();
-    const t = setInterval(() => document.visibilityState === "visible" && load(), POLL_MS);
-    return () => clearInterval(t);
   }, [load]);
+  useAutoRefresh(load, POLL_MS);
 
   const send = useCallback((lat: number, lng: number) => {
     if (Date.now() - lastSent.current < 10_000) return;

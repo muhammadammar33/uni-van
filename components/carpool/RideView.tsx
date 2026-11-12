@@ -21,6 +21,7 @@ import { GoogleButton } from "@/components/GoogleButton";
 import { addDays, describeSchedule } from "@/lib/schedule";
 import type { VerifyMode } from "@/lib/verify";
 import { ChatButton } from "@/components/carpool/RideChat";
+import { useAutoRefresh } from "@/components/useAutoRefresh";
 
 const PROFILE = "hamsafar:rider";
 const bookingKey = (slug: string) => `hamsafar:booking:${slug}`;
@@ -92,9 +93,9 @@ export function RideView({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- first load of live data
     refresh();
-    const t = setInterval(() => document.visibilityState === "visible" && refresh(), 15000);
-    return () => clearInterval(t);
   }, [refresh]);
+  // Seats left and the driver's position: every 30 s (both are also cached briefly for everyone).
+  useAutoRefresh(refresh, 30_000);
 
   // Remembered rider details and this ride's booking.
   useEffect(() => {

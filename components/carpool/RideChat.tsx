@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Ban, Check, CheckCheck, Flag, LockOpen, MessagesSquare, MoreVertical, Send, ShieldAlert, X } from "lucide-react";
+import { useAutoRefresh } from "@/components/useAutoRefresh";
 
 type Msg = { id: number; mine: boolean; body: string; at: string };
 type View = {
@@ -18,8 +19,8 @@ type View = {
 
 const MAX = 500;
 /** How often an open chat checks for new messages, and how often a closed one checks the unread count. */
-const OPEN_POLL_MS = 4000;
-const PEEK_POLL_MS = 20000;
+const OPEN_POLL_MS = 5000;
+const PEEK_POLL_MS = 60_000;
 
 async function call<T>(id: number, body: Record<string, unknown>): Promise<T> {
   const res = await fetch(`/api/chat/${id}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -52,17 +53,19 @@ export function ChatButton({
   const [peeked, setPeeked] = useState(0);
   const unread = open ? 0 : (given ?? peeked);
 
-  useEffect(() => {
-    if (given !== undefined || open) return;
-    const peek = () =>
-      document.visibilityState === "visible" &&
+  const peekNeeded = given === undefined && !open;
+  const peek = useCallback(
+    () =>
       call<{ unread: number }>(chat.id, { key: chat.key, action: "peek" })
         .then((r) => setPeeked(r.unread))
-        .catch(() => {});
-    peek();
-    const t = setInterval(peek, PEEK_POLL_MS);
-    return () => clearInterval(t);
-  }, [chat.id, chat.key, given, open]);
+        .catch(() => {}),
+    [chat.id, chat.key],
+  );
+  useEffect(() => {
+    if (peekNeeded) void peek();
+  }, [peekNeeded, peek]);
+  // New messages also arrive as notifications in the app, so a slow check is enough here.
+  useAutoRefresh(peek, PEEK_POLL_MS, peekNeeded);
 
   const badge = unread > 0 && (
     <span className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[11px] font-bold leading-5 text-white" aria-label={`${unread} unread`}>
@@ -129,16 +132,16 @@ export function ChatSheet({ chat, onClose }: { chat: { id: number; key: string }
 
   useEffect(() => {
     poll();
-    const t = setInterval(() => document.visibilityState === "visible" && poll(), OPEN_POLL_MS);
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
     return () => {
-      clearInterval(t);
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
   }, [poll, onClose]);
+
+  useAutoRefresh(poll, OPEN_POLL_MS);
 
   // Keep the newest message in view.
   useEffect(() => {

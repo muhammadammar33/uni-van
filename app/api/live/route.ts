@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 /** People sharing their location right now (?ride=<slug> for one ride's driver). */
 export async function GET(req: Request) {
   const ride = new URL(req.url).searchParams.get("ride") ?? undefined;
-  return handle(async () => ({ positions: await livePositions(ride) }));
+  // The same for every visitor (riders are already blurred and nameless), so shared from cache for 10 s.
+  return handle(async () => ({ positions: await livePositions(ride) }), { sharedCacheSeconds: 10 });
 }
 
 /** Share or update my position. */

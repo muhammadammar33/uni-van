@@ -10,5 +10,5 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/rides/[slug]">)
     const ride = await publicRide(slug);
     if (!ride) throw new BookingError("Ride not found", 404);
     return ride;
-  });
+  }, { sharedCacheSeconds: 15 });
 }

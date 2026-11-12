@@ -12,10 +12,23 @@ export function logError(label: string, err: unknown) {
   console.error(`${label}:`, e?.name ?? "Error", e?.code ?? e?.statusCode ?? e?.cause?.code ?? "", cause);
 }
 
-/** Runs a route handler body, turning BookingErrors into `{ error }` JSON with their status. */
-export async function handle(fn: () => Promise<unknown>) {
+/**
+ * Public data that's the same for everyone (a ride's seats, the live map) can be shared from Vercel's cache for
+ * a few seconds: then a thousand open pages cost about one server run every few seconds, not a thousand.
+ * Browsers themselves always ask again.
+ */
+const sharedFor = (seconds: number) => ({
+  "cache-control": "public, max-age=0, must-revalidate",
+  "vercel-cdn-cache-control": `max-age=${seconds}, stale-while-revalidate=${seconds * 2}`,
+});
+
+/**
+ * Runs a route handler body, turning BookingErrors into `{ error }` JSON with their status. `sharedCacheSeconds`:
+ * only for answers with nothing personal in them (see sharedFor); errors are never cached.
+ */
+export async function handle(fn: () => Promise<unknown>, opts: { sharedCacheSeconds?: number } = {}) {
   try {
-    return NextResponse.json(await fn(), { headers: NO_STORE });
+    return NextResponse.json(await fn(), { headers: opts.sharedCacheSeconds ? sharedFor(opts.sharedCacheSeconds) : NO_STORE });
   } catch (err) {
     if (err instanceof BookingError) return NextResponse.json({ error: err.message, ...err.extra }, { status: err.status, headers: NO_STORE });
     logError("request failed", err);

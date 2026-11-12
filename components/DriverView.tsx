@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Banknote, Bus, CalendarDays, Check, Clock, MapPin, MessageCircle, Phone, UserCheck } from "lucide-react";
 import { GenderIcon } from "@/components/SeatMap";
 import { displayPhone, formatDateRange, formatFare, formatTime } from "@/lib/format";
 import { orgInfo } from "@/lib/orgTypes";
 import type { DriverPassenger, DriverTrip } from "@/lib/trips";
+import { useAutoRefresh } from "@/components/useAutoRefresh";
 
-const POLL_MS = 15_000;
+const POLL_MS = 30_000;
 
 type Field = "boarded" | "paid";
 
@@ -32,15 +33,7 @@ export function DriverView({ token, initial }: { token: string; initial: DriverT
     }
   }, [token]);
 
-  useEffect(() => {
-    const id = setInterval(() => document.visibilityState === "visible" && refresh(), POLL_MS);
-    const onFocus = () => refresh();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      clearInterval(id);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [refresh]);
+  useAutoRefresh(refresh, POLL_MS);
 
   const value = (p: DriverPassenger, field: Field) => pending[`${p.id}:${field}`] ?? p[field];
 

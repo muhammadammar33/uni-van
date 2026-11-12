@@ -7,8 +7,9 @@ import { formatDate, formatDateRange, formatFare, formatTime, normalizePhone, di
 import { orgInfo } from "@/lib/orgTypes";
 import { checkSeat, fareRange, findSeat, seatFare, seatStats, type Gender } from "@/lib/layout";
 import type { BookingView, PublicTrip } from "@/lib/trips";
+import { useAutoRefresh } from "@/components/useAutoRefresh";
 
-const POLL_MS = 10_000;
+const POLL_MS = 30_000;
 const PROFILE_KEY = "van:profile";
 const bookingKey = (slug: string) => `van:booking:${slug}`;
 
@@ -78,17 +79,7 @@ export function BookingFlow({ slug, initial }: { slug: string; initial: PublicTr
         .catch(() => save(bookingKey(slug), null));
   }, [slug]);
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (document.visibilityState === "visible") refresh();
-    }, POLL_MS);
-    const onFocus = () => refresh();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      clearInterval(id);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [refresh]);
+  useAutoRefresh(refresh, POLL_MS);
 
   // Whose gender the seat rules use: the registered rider's, nobody's (no rule), or the one chosen.
   const gender: Gender | null = trip.membersOnly ? (member?.gender ?? null) : rule === "none" ? null : profile.gender;

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CircleCheckBig, Flag, KeyRound, Lock, Navigation, Play, UserX } from "lucide-react";
 import type { ManageData } from "@/lib/rides";
+import { useAutoRefresh } from "@/components/useAutoRefresh";
 
 /**
  * Today's trip for the driver: pickup by pickup, who's on board. The driver can only start the ride from a
@@ -35,11 +36,7 @@ export function TripPanel({
   const waiting = here.filter((b) => !b.boarded && !b.noShow);
 
   // While riders are entering the code, show it as it happens.
-  useEffect(() => {
-    if (!waiting.length) return;
-    const t = setInterval(() => document.visibilityState === "visible" && router.refresh(), 5000);
-    return () => clearInterval(t);
-  }, [waiting.length, router]);
+  useAutoRefresh(() => router.refresh(), 10_000, waiting.length > 0);
 
   if (!trip || !today.length || data.ride.status !== "active") return null;
 

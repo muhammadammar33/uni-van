@@ -18,6 +18,7 @@ import { displayPhone, formatDate, formatFare, formatTime, todayLocal } from "@/
 import type { ManageData } from "@/lib/rides";
 import type { VerifyMode } from "@/lib/verify";
 import { addDays, describeSchedule } from "@/lib/schedule";
+import { useAutoRefresh } from "@/components/useAutoRefresh";
 
 const dayWord = (d: string) => (d === todayLocal() ? "Today" : d === addDays(todayLocal(), 1) ? "Tomorrow" : formatDate(d));
 
@@ -49,15 +50,12 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
     if (isNew || saved) rememberRide({ slug: ride.slug, token, title });
   }, [isNew, saved, ride.slug, token, title]);
 
-  // Fresh bookings without reloading.
-  useEffect(() => {
-    const t = setInterval(() => document.visibilityState === "visible" && router.refresh(), 30000);
-    return () => clearInterval(t);
-  }, [router]);
+  // Fresh bookings and chat badges without reloading (new bookings and messages also arrive as notifications).
+  useAutoRefresh(() => router.refresh(), 60_000);
 
   const send = useCallback(
     (lat: number, lng: number) => {
-      if (Date.now() - lastSent.current < 8000) return;
+      if (Date.now() - lastSent.current < 12_000) return;
       lastSent.current = Date.now();
       fetch("/api/live", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: `d${deviceId()}`, role: "driver", token, lat, lng }) })
         .then(async (r) => !r.ok && setShareError((await r.json().catch(() => ({}))).error ?? "Couldn't share location"))
