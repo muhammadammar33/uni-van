@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { lt, sql } from "drizzle-orm";
-import { logError } from "@/lib/api";
+import { cronAllowed, logError } from "@/lib/api";
 import { CHAT_KEEP_DAYS } from "@/lib/chat";
 import { requireDb, schema as s } from "@/lib/db";
 import { purgeReviewedPhotos } from "@/lib/identity";
@@ -13,8 +13,7 @@ import { refreshPetrolPrice } from "@/lib/petrol";
 export const maxDuration = 60;
 
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new NextResponse("Not allowed", { status: 401 });
+  if (!cronAllowed(req)) return new NextResponse("Not allowed", { status: 401 });
   try {
     let photos = 0;
     for (let i = 0; i < 10; i++) {

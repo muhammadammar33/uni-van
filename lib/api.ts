@@ -1,5 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { BookingError } from "@/lib/trips";
 
 /** API answers often carry phone numbers, booking codes or names: never kept in a (shared) browser's cache. */
@@ -34,6 +35,15 @@ export async function handle(fn: () => Promise<unknown>, opts: { sharedCacheSeco
     logError("request failed", err);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
+}
+
+/** A scheduled job's call (Vercel Cron, the petrol job): `Authorization: Bearer <CRON_SECRET>`, compared in
+ * constant time. Without CRON_SECRET set, nothing is allowed. */
+export function cronAllowed(req: Request) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  const h = (s: string) => createHash("sha256").update(s).digest();
+  return timingSafeEqual(h(req.headers.get("authorization") ?? ""), h(`Bearer ${secret}`));
 }
 
 /** Largest request body accepted (ID photos are the biggest: a few compressed pictures). */

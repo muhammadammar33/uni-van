@@ -1,4 +1,5 @@
 import { handle } from "@/lib/api";
+import { clientKey, take } from "@/lib/rateLimit";
 import { roadRoute } from "@/lib/routing";
 import { BookingError } from "@/lib/trips";
 
@@ -15,6 +16,12 @@ export async function GET(req: Request) {
   });
   const ok = points.length >= 2 && points.length <= 12 && points.every((p) => p.lat >= 23 && p.lat <= 37.5 && p.lng >= 60 && p.lng <= 78);
   if (!ok) return handle(async () => { throw new BookingError("Send 2 to 12 points in Pakistan"); });
+  // Answers already in Vercel's cache don't get here; this stops one visitor using up the routing quota.
+  try {
+    await take(`route:${clientKey(req.headers)}`, 120, 3600, "Too many route lookups. Please try again in a while.");
+  } catch (err) {
+    return handle(async () => { throw err; });
+  }
   const route = await roadRoute(points);
   return handle(async () => route, { sharedCacheSeconds: route.source === "straight" ? 120 : 86400 });
 }

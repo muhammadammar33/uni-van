@@ -39,6 +39,9 @@ const otherHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   // Location and camera (ID photos) are used by the site itself; microphone and payments never.
   { key: "Permissions-Policy", value: "geolocation=(self), camera=(self), microphone=(), payment=(), usb=()" },
+  // Other sites' windows can't reach into ours, and other sites can't load our files into their pages.
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  { key: "Cross-Origin-Resource-Policy", value: "same-site" },
 ];
 
 const nextConfig: NextConfig = {

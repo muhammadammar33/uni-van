@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { handle } from "@/lib/api";
+import { cronAllowed, handle } from "@/lib/api";
 import { currentPetrolPrice, lastPetrolTry, refreshPetrolPrice, savePetrolPrice } from "@/lib/petrol";
 
 /** Reading OGRA's PDF can take a while: allow it time when it runs after a response. */
@@ -27,8 +27,7 @@ export async function GET() {
  * with `Authorization: Bearer <CRON_SECRET>`. The same checks apply as when the site reads OGRA itself.
  */
 export async function POST(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new Response("Not allowed", { status: 401 });
+  if (!cronAllowed(req)) return new Response("Not allowed", { status: 401 });
   const body = (await req.json().catch(() => ({}))) as { price?: unknown; effective?: unknown; url?: unknown };
   if (typeof body.url !== "string" || !/^https:\/\/www\.ogra\.org\.pk\/download\/\d+\?lang=en$/.test(body.url))
     return Response.json({ ok: false, note: "Not an OGRA notice link" }, { status: 400 });
