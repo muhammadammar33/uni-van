@@ -202,8 +202,14 @@ export const rides = pgTable(
     car: text("car").notNull(),
     plate: text("plate"),
     seats: integer("seats").notNull(),
-    /** Per seat, whole rupees; null = free / to be agreed. */
+    /** Per seat for the whole route, whole rupees; null = free / to be agreed. Riders pay their part (lib/fare.ts). */
     fare: integer("fare"),
+    /** The driver's car's fuel average, km a litre (for the fare suggestion and cap). */
+    kmPerLitre: integer("km_per_litre").default(12).notNull(),
+    /** Road distance from each stop to the next, km (lib/routing.ts); null on rides from before. */
+    legKm: jsonb("leg_km").$type<number[]>(),
+    /** The route along the roads, encoded polyline; null when it couldn't be worked out. */
+    routeLine: text("route_line"),
     riders: rideRidersEnum("riders").default("anyone").notNull(),
     /** Local "HH:MM" leaving the first point. */
     departTime: text("depart_time").notNull(),

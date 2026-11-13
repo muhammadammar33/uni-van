@@ -6,6 +6,7 @@ import { formatDate, formatFare, formatTime, todayLocal } from "@/lib/format";
 import { formatKm } from "@/lib/geo";
 import { addDays, describeSchedule } from "@/lib/schedule";
 import type { PublicRide } from "@/lib/rides";
+import { partFare } from "@/lib/fare";
 
 function dayWord(d: string) {
   const today = todayLocal();
@@ -18,6 +19,8 @@ export function RideCard({ ride, pickupIdx, dropIdx, pickupKm, href }: { ride: P
   const a = pickupIdx ?? 0;
   const b = dropIdx ?? pts.length - 1;
   const next = ride.runs.find((r) => r.left > 0) ?? ride.runs[0];
+  // Riders pay for the part of the route they travel.
+  const fare = partFare(ride.fare, ride.legKm, a, b);
   return (
     <Link href={href} className="card group flex h-full min-w-0 flex-col !p-4 transition hover:-translate-y-0.5 hover:shadow-lift sm:!p-5">
       <div className="flex items-center gap-3">
@@ -36,7 +39,7 @@ export function RideCard({ ride, pickupIdx, dropIdx, pickupKm, href }: { ride: P
             {describeSchedule(ride.schedule)}
           </div>
         </div>
-        {ride.fare !== null ? <div className="shrink-0 text-right font-extrabold">{formatFare(ride.fare)}</div> : <div className="shrink-0 text-xs font-bold text-emerald-700">Free</div>}
+        {fare !== null && fare > 0 ? <div className="shrink-0 text-right font-extrabold">{formatFare(fare)}</div> : <div className="shrink-0 text-xs font-bold text-emerald-700">Free</div>}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-sm text-slate-600">
         <span className="flex items-center gap-1.5 font-medium text-ink">

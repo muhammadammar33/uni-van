@@ -15,7 +15,8 @@ export default async function PetrolPage({ searchParams }: PageProps<"/admin/pet
   const sp = await searchParams;
   const [p, last] = await Promise.all([currentPetrolPrice(), lastPetrolTry()]);
   // An example route so the effect of the price is visible: Saddar (Rawalpindi) to F-6 Markaz.
-  const example = fareGuide([{ lat: 33.5973, lng: 73.0479 }, { lat: 33.7294, lng: 73.0771 }], p.price);
+  // 21.7 km by road; a car doing 12 km a litre (drivers enter their own car's average).
+  const example = fareGuide(21.7, p.price, 12);
   const old = p.effective ? p.effective < todayLocal() : true;
   return (
     <>
@@ -34,7 +35,7 @@ export default async function PetrolPage({ searchParams }: PageProps<"/admin/pet
             {old && " · check today’s notice"}
           </p>
           <p className="text-sm text-slate-600">
-            Example, Saddar → F-6 (about {example.km} km): suggested <b>Rs. {example.suggested}</b> a seat, at most Rs. {example.max}.
+            Example, Saddar → F-6 (about {example.km} km by road, a car doing 12 km/litre): suggested <b>Rs. {example.suggested}</b> a seat, at most Rs. {example.max}.
           </p>
           {last && !last.ok && <p className="rounded-xl bg-slate-50 p-2.5 text-xs text-slate-500">Last automatic reading ({formatDate(last.at.slice(0, 10))}): {last.note}</p>}
         </section>

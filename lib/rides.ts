@@ -16,7 +16,8 @@ import { nextRuns, runOver, runsOn, type Schedule } from "@/lib/schedule";
 import { pushLater } from "@/lib/push";
 import { formatDate } from "@/lib/format";
 import { chatKey, driverUnread } from "@/lib/chat";
-import { fareGuide } from "@/lib/fare";
+import { DEFAULT_KM_PER_LITRE, fareGuide, KMPL_MAX, KMPL_MIN, partFare, straightLegs } from "@/lib/fare";
+import { roadRoute } from "@/lib/routing";
 import { currentPetrolPrice } from "@/lib/petrol";
 import { notifyRouteAlerts } from "@/lib/routeAlerts";
 
@@ -42,6 +43,10 @@ export const rideInput = z
     plate: z.string().trim().max(20).optional().default(""),
     seats: z.coerce.number().int().min(1, "At least 1 seat").max(12, "12 seats at most"),
     fare: z.union([z.literal(""), z.literal(null), z.coerce.number().int().min(0).max(100000)]).optional(),
+    kmPerLitre: z.preprocess(
+      (v) => (v === "" || v === null || v === undefined ? DEFAULT_KM_PER_LITRE : v),
+      z.coerce.number().int(`Enter your car's average in whole km a litre`).min(KMPL_MIN, `A car's average is at least ${KMPL_MIN} km a litre`).max(KMPL_MAX, `Enter ${KMPL_MAX} km a litre or less`),
+    ),
     riders: z.enum(["anyone", "female", "male"]).default("anyone"),
     departTime: hhmm,
     schedule: z.enum(["once", "daily", "weekly"]),
@@ -56,7 +61,7 @@ export const rideInput = z
 
 export type RideInput = z.input<typeof rideInput>;
 
-function readRide(raw: unknown, petrolPrice: number) {
+async function readRide(raw: unknown, petrolPrice: number) {
   const parsed = rideInput.safeParse(raw);
   if (!parsed.success) throw new BookingError(parsed.error.issues[0]?.message ?? "Check the form");
   const r = parsed.data;
@@ -70,12 +75,14 @@ function readRide(raw: unknown, petrolPrice: number) {
   } else if (r.points.every(inCityArea)) {
     throw new BookingError(`This whole route is inside Islamabad, Rawalpindi, Wah, Taxila and Rawat. Choose "In the city" instead.`);
   }
+  // The distance along the roads (lib/routing.ts), for fares and the map.
+  const route = await roadRoute(r.points);
   // Fares share the fuel cost (lib/fare.ts): no more than half again above the suggested fare.
   if (typeof r.fare === "number" && r.fare > 0) {
-    const g = fareGuide(r.points, petrolPrice);
+    const g = fareGuide(route.km, petrolPrice, r.kmPerLitre);
     if (r.fare > g.max)
       throw new BookingError(
-        `Hamsafar fares share the cost of fuel: for this route (about ${g.km} km) the most you can ask is Rs. ${g.max} a seat. The suggested fare is Rs. ${g.suggested} (petrol at Rs. ${petrolPrice} a litre).`,
+        `Hamsafar fares share the cost of fuel: for this route (about ${g.km} km, ${r.kmPerLitre} km a litre) the most you can ask is Rs. ${g.max} a seat for the whole way. The suggested fare is Rs. ${g.suggested} (petrol at Rs. ${petrolPrice} a litre).`,
       );
   }
   return {
@@ -88,6 +95,9 @@ function readRide(raw: unknown, petrolPrice: number) {
       plate: r.plate || null,
       seats: r.seats,
       fare: r.fare === "" || r.fare === null || r.fare === undefined ? null : r.fare,
+      kmPerLitre: r.kmPerLitre,
+      legKm: route.legKm,
+      routeLine: route.line,
       riders: r.riders,
       departTime: r.departTime,
       schedule: r.schedule,
@@ -121,7 +131,7 @@ async function routeName(rideId: number) {
 
 /** `user`: the signed-in driver (null only while Google sign-in isn't switched on). */
 export async function createRide(raw: unknown, user: s.User | null) {
-  const { ride, points } = readRide(raw, (await currentPetrolPrice()).price);
+  const { ride, points } = await readRide(raw, (await currentPetrolPrice()).price);
   ride.driverPhone = await phoneFor(user, ride.driverPhone, tokenOf(raw));
   if (ride.schedule === "once" && ride.date < todayLocal()) throw new BookingError("The date has already passed");
   // The driver's ID: rides of drivers still being checked are saved, and go live once they're approved.
@@ -154,7 +164,7 @@ function notifyLater(rideIds: number[]) {
 /** Replaces a ride's details and route (only while nobody has booked a future date at a removed stop). */
 /** `user`: whoever is signed in, if anyone (the manage link is the key to the ride). */
 export async function updateRide(token: string, raw: unknown, user: s.User | null = null) {
-  const { ride, points } = readRide(raw, (await currentPetrolPrice()).price);
+  const { ride, points } = await readRide(raw, (await currentPetrolPrice()).price);
   const db = requireDb();
   return db.transaction(async (tx) => {
     const [row] = await tx.select().from(s.rides).where(eq(s.rides.manageToken, token)).for("update");
@@ -258,6 +268,10 @@ export type PublicRide = {
   notes: string | null;
   status: s.Ride["status"];
   points: { name: string; lat: number; lng: number }[];
+  /** Road km from each stop to the next (riders pay for their part of the route). */
+  legKm: number[];
+  /** The route along the roads (encoded polyline), when known. */
+  line: string | null;
   /** Upcoming run dates with seats left on each. */
   runs: { date: string; left: number }[];
   /** The driver's rating from riders who travelled with them (on any of their rides); null when none yet. */
@@ -271,6 +285,11 @@ export type PublicRide = {
 
 export type DriverRating = { avg: number; count: number };
 export type PublicReview = { name: string; stars: number; comment: string | null; date: string };
+
+/** Road km between stops; rides from before road routing use the straight-line estimate. */
+function legsOf(r: s.Ride, points: LatLng[]) {
+  return r.legKm && r.legKm.length === points.length - 1 ? r.legKm : straightLegs(points).map((k) => Math.round(k * 10) / 10);
+}
 
 function toPublic(r: s.Ride, points: s.RidePoint[], taken: Map<string, number>, runs: string[], ratings: Map<string, DriverRating>, verified: Set<string>): PublicRide {
   return {
@@ -286,6 +305,8 @@ function toPublic(r: s.Ride, points: s.RidePoint[], taken: Map<string, number>, 
     notes: r.notes,
     status: r.status,
     points: points.map((p) => ({ name: p.name, lat: p.lat, lng: p.lng })),
+    legKm: legsOf(r, points),
+    line: r.routeLine,
     runs: runs.map((date) => ({ date, left: Math.max(0, r.seats - (taken.get(`${r.id}:${date}`) ?? 0)) })),
     rating: ratings.get(r.driverPhone) ?? null,
     verified: verified.has(r.driverPhone),
@@ -341,7 +362,8 @@ export async function publicRide(slug: string) {
   return { ...toPublic(r, points, taken, runs, ratings, verified), reviews };
 }
 
-export type SearchResult = PublicRide & { pickupKm: number; dropKm: number; pickupIdx: number; dropIdx: number };
+/** `partFare`: the fare per seat for the searcher's part of the route. */
+export type SearchResult = PublicRide & { pickupKm: number; dropKm: number; pickupIdx: number; dropIdx: number; partFare: number | null };
 
 /**
  * Active rides of `kind` passing near `from` and then `to`, running on `date` (or any of the next 7 days when null).
@@ -398,7 +420,8 @@ export async function searchRides(from: LatLng | null, to: LatLng | null, date: 
       let dropIdx = nearest(pts, to, pts.length - 1);
       if (dropIdx <= pickupIdx) dropIdx = Math.min(pts.length - 1, pickupIdx + 1);
       if (pickupIdx >= dropIdx) pickupIdx = Math.max(0, dropIdx - 1);
-      return { ...toPublic(ride, pts, taken, runs, ratings, verified), pickupKm: match?.pickupKm ?? 0, dropKm: match?.dropKm ?? 0, pickupIdx, dropIdx };
+      const pub = toPublic(ride, pts, taken, runs, ratings, verified);
+      return { ...pub, pickupKm: match?.pickupKm ?? 0, dropKm: match?.dropKm ?? 0, pickupIdx, dropIdx, partFare: partFare(ride.fare, pub.legKm, pickupIdx, dropIdx) };
     })
     .filter((r) => r.runs.some((x) => x.left > 0))
     .sort((a, b) => a.runs[0].date.localeCompare(b.runs[0].date) || a.departTime.localeCompare(b.departTime) || a.pickupKm + a.dropKm - (b.pickupKm + b.dropKm));
@@ -508,7 +531,7 @@ export async function bookRide(slug: string, raw: unknown, user: s.User | null):
     if (input.seats > left) throw new BookingError(left === 0 ? "This ride is full on that day." : `Only ${left} seat${left === 1 ? "" : "s"} left on that day.`, 409);
     const [b] = await tx
       .insert(s.rideBookings)
-      .values({ rideId: r.id, userId: user?.id ?? null, date: input.date, name: input.name, phone, gender: input.gender, seats: input.seats, pickupIdx: input.pickupIdx, dropIdx: input.dropIdx, fare: r.fare, code: newCode() })
+      .values({ rideId: r.id, userId: user?.id ?? null, date: input.date, name: input.name, phone, gender: input.gender, seats: input.seats, pickupIdx: input.pickupIdx, dropIdx: input.dropIdx, fare: partFare(r.fare, legsOf(r, pts), input.pickupIdx, input.dropIdx), code: newCode() })
       .returning();
     pushLater([r.driverPhone], {
       title: "New booking",
@@ -731,6 +754,7 @@ export async function manageRide(token: string) {
     rating: ratings.get(r.driverPhone) ?? null,
     reviews,
     points: pts.map((p) => ({ name: p.name, lat: p.lat, lng: p.lng, key: p.placeKey ?? undefined })),
+    line: r.routeLine,
     runs,
     bookings: bookings.map((b) => ({
       id: b.id,
@@ -742,6 +766,8 @@ export async function manageRide(token: string) {
       pickup: pts[b.pickupIdx]?.name ?? "",
       drop: pts[b.dropIdx]?.name ?? "",
       pickupIdx: b.pickupIdx,
+      /** What this rider pays in all (their part of the route × seats). */
+      fare: b.fare === null ? null : b.fare * b.seats,
       boarded: !!b.boardedAt,
       noShow: !!b.noShowAt,
       chat: { id: b.id, key: chatKey(b.id, "driver"), unread: unread.get(b.id) ?? 0 },

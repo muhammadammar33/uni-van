@@ -75,7 +75,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
             {date && <span className="font-semibold text-slate-500"> · {formatDate(date)}</span>}
             {kind === "intercity" && <span className="font-semibold text-slate-500"> · between cities</span>}
           </h1>
-          {(from || to) && <SearchMap from={from} to={to} routes={rides.slice(0, 8).map((r) => ({ points: r.points, highlight: [r.pickupIdx, r.dropIdx] as [number, number] }))} />}
+          {(from || to) && <SearchMap from={from} to={to} routes={rides.slice(0, 8).map((r) => ({ points: r.points, line: r.line, highlight: [r.pickupIdx, r.dropIdx] as [number, number] }))} />}
           {rides.length ? (
             <ul className="space-y-3">
               {rides.map((r) => (

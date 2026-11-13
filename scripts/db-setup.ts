@@ -5,7 +5,7 @@
 import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
 import { put } from "@vercel/blob";
-import { and, asc, count, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
@@ -56,6 +56,7 @@ async function main() {
   }
 
   await moveIdPhotosToFiles(db);
+  await addRoadRoutes(db);
   await client.end();
 }
 
@@ -85,6 +86,27 @@ async function moveIdPhotosToFiles(db: ReturnType<typeof drizzle<typeof s>>) {
     if (moved) console.log(`[db-setup] moved ${moved} ID photos to file storage`);
   } catch (err) {
     console.warn(`[db-setup] moving ID photos to file storage stopped after ${moved}:`, (err as Error).message);
+  }
+}
+
+/** Rides from before road routing: their road distances and line (a few at each deploy; the public OSRM server is shared). */
+async function addRoadRoutes(db: ReturnType<typeof drizzle<typeof s>>) {
+  try {
+    const { roadRoute } = await import("../lib/routing");
+    const rows = await db.select({ id: s.rides.id }).from(s.rides).where(and(isNull(s.rides.legKm), inArray(s.rides.status, ["active", "pending", "paused"]))).limit(40);
+    let done = 0;
+    for (const r of rows) {
+      const pts = await db.select().from(s.ridePoints).where(eq(s.ridePoints.rideId, r.id)).orderBy(asc(s.ridePoints.idx));
+      if (pts.length < 2) continue;
+      const route = await roadRoute(pts);
+      if (route.source === "straight") continue;
+      await db.update(s.rides).set({ legKm: route.legKm, routeLine: route.line }).where(eq(s.rides.id, r.id));
+      done++;
+      await new Promise((ok) => setTimeout(ok, 1100));
+    }
+    if (done) console.log(`[db-setup] added road routes to ${done} rides`);
+  } catch (err) {
+    console.warn("[db-setup] adding road routes stopped:", (err as Error).message);
   }
 }
 

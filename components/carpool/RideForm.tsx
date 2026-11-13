@@ -17,7 +17,8 @@ import type { RideKind } from "@/lib/cities";
 import type { Point } from "@/lib/places";
 import { WEEKDAYS } from "@/lib/schedule";
 import type { VerifyMode } from "@/lib/verify";
-import { fareGuide, PETROL_PRICE } from "@/lib/fare";
+import { DEFAULT_KM_PER_LITRE, fareGuide, KMPL_MAX, KMPL_MIN, PETROL_PRICE, straightLegs } from "@/lib/fare";
+import { decodePolyline } from "@/lib/polyline";
 
 export type RideFormValues = {
   /** In the city (Islamabad, Rawalpindi, Wah, Taxila, Rawat) or between cities. */
@@ -31,6 +32,8 @@ export type RideFormValues = {
   plate: string;
   seats: number;
   fare: string;
+  /** The car's fuel average, km a litre (as typed). */
+  kmPerLitre: string;
   riders: "anyone" | "female" | "male";
   departTime: string;
   schedule: "once" | "daily" | "weekly";
@@ -51,6 +54,7 @@ export const emptyRide = (kind: RideKind = "city"): RideFormValues => ({
   plate: "",
   seats: 3,
   fare: "",
+  kmPerLitre: "",
   riders: "anyone",
   departTime: "08:00",
   schedule: "weekly",
@@ -113,7 +117,7 @@ export function RideForm({
     try {
       const me = JSON.parse(localStorage.getItem("hamsafar:driver") ?? "null");
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reading localStorage after hydration
-      if (me) setV((cur) => ({ ...cur, driverName: me.driverName ?? "", driverPhone: me.driverPhone ?? "", driverGender: idGender ?? me.driverGender ?? null, car: me.car ?? "", plate: me.plate ?? "" }));
+      if (me) setV((cur) => ({ ...cur, driverName: me.driverName ?? "", driverPhone: me.driverPhone ?? "", driverGender: idGender ?? me.driverGender ?? null, car: me.car ?? "", plate: me.plate ?? "", kmPerLitre: me.kmPerLitre ?? "" }));
     } catch {}
     // Signed in: the account's name and checked number.
     if (account) setV((cur) => ({ ...cur, driverName: cur.driverName || account.name, driverPhone: account.phone ? displayPhone(account.phone) : cur.driverPhone }));
@@ -131,8 +135,29 @@ export function RideForm({
       .then((p) => p?.price && setPetrol({ price: p.price, effective: p.effective ?? null }))
       .catch(() => {});
   }, []);
-  // Suggested fuel-share fare once the route has a start and an end (lib/fare.ts); the server enforces the cap.
-  const guide = route.length >= 2 ? fareGuide(route, petrol.price) : null;
+  // The distance along the roads (and the road line for the map) once the route has a start and an end.
+  const routeKey = route.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join(";");
+  const [road, setRoad] = useState<{ key: string; km: number; line: string | null; source: string } | null>(null);
+  useEffect(() => {
+    if (route.length < 2) return;
+    const ctl = new AbortController();
+    const t = setTimeout(() => {
+      fetch(`/api/route?p=${routeKey}`, { signal: ctl.signal })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => j && setRoad({ key: routeKey, km: j.km, line: j.line, source: j.source }))
+        .catch(() => {});
+    }, 400);
+    return () => {
+      clearTimeout(t);
+      ctl.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- routeKey stands for the route
+  }, [routeKey]);
+  const roadNow = road?.key === routeKey ? road : null;
+  const km = route.length >= 2 ? (roadNow?.km ?? straightLegs(route).reduce((a, b) => a + b, 0)) : 0;
+  const kmpl = Number(v.kmPerLitre) >= KMPL_MIN && Number(v.kmPerLitre) <= KMPL_MAX ? Number(v.kmPerLitre) : DEFAULT_KM_PER_LITRE;
+  // Suggested fuel-share fare (lib/fare.ts); the server enforces the cap.
+  const guide = route.length >= 2 ? fareGuide(km, petrol.price, kmpl) : null;
   const tooHigh = !!guide && v.fare.trim() !== "" && Number(v.fare) > guide.max;
 
   async function submit(e: React.FormEvent) {
@@ -147,7 +172,7 @@ export function RideForm({
     if (phoneToken === null) return setError(normalizePhone(v.driverPhone) ? "Verify your WhatsApp number to publish." : "Enter a valid phone number, e.g. 0300 1234567");
     setBusy(true);
     try {
-      const body = { ...v, fare: v.fare.trim() === "" ? "" : Number(v.fare), until: v.until || "", points: route, phoneToken };
+      const body = { ...v, fare: v.fare.trim() === "" ? "" : Number(v.fare), kmPerLitre: v.kmPerLitre.trim() === "" ? "" : Number(v.kmPerLitre), until: v.until || "", points: route, phoneToken };
       const send = async () => {
         const res = await fetch(token ? `/api/rides/manage/${token}` : "/api/rides", {
           method: token ? "PATCH" : "POST",
@@ -174,7 +199,7 @@ export function RideForm({
       }
       if (!res.ok) throw new Error(json.error ?? "Couldn't save. Please try again.");
       try {
-        localStorage.setItem("hamsafar:driver", JSON.stringify({ driverName: v.driverName, driverPhone: v.driverPhone, driverGender: v.driverGender, car: v.car, plate: v.plate }));
+        localStorage.setItem("hamsafar:driver", JSON.stringify({ driverName: v.driverName, driverPhone: v.driverPhone, driverGender: v.driverGender, car: v.car, plate: v.plate, kmPerLitre: v.kmPerLitre }));
       } catch {}
       if (token) {
         onSaved?.();
@@ -247,7 +272,12 @@ export function RideForm({
             ? "Add the places you pass, so riders along the way find your ride. Riders within about 3 km of your route can join."
             : "Add the cities you pass (e.g. Islamabad, Jhelum, Gujranwala, Lahore), so riders on the way find your ride. Riders within about 25 km of a stop can join."}
         </p>
-        {route.length > 0 && <MapView className="h-56" routes={[{ points: route }]} fitKey={route.map((p) => `${p.lat},${p.lng}`).join(";")} />}
+        {route.length > 0 && <MapView className="h-56" routes={[{ points: route, line: roadNow?.line ? decodePolyline(roadNow.line) : undefined }]} fitKey={routeKey} />}
+        {route.length >= 2 && (
+          <p className="-mt-2 text-xs text-slate-500">
+            {roadNow && roadNow.source !== "straight" ? `About ${Math.round(km)} km by road.` : `About ${Math.round(km)} km (estimate).`}
+          </p>
+        )}
       </section>
 
       <section className="card space-y-4">
@@ -341,8 +371,28 @@ export function RideForm({
             </select>
           </div>
           <div>
+            <label className="label" htmlFor="kmPerLitre">
+              Your car&apos;s fuel average <span className="font-normal text-slate-400">(km per litre)</span>
+            </label>
+            <input
+              id="kmPerLitre"
+              type="number"
+              inputMode="numeric"
+              min={KMPL_MIN}
+              max={KMPL_MAX}
+              className="input"
+              value={v.kmPerLitre}
+              onChange={(e) => set({ kmPerLitre: e.target.value })}
+              placeholder={`e.g. ${DEFAULT_KM_PER_LITRE}`}
+              aria-describedby="kmpl-hint"
+            />
+            <p id="kmpl-hint" className="mt-1 text-xs text-slate-500">
+              How far your car goes on a litre of petrol in the city. Empty = {DEFAULT_KM_PER_LITRE}. Used for the fair fare.
+            </p>
+          </div>
+          <div>
             <label className="label" htmlFor="fare">
-              Fare per seat (Rs.) <span className="font-normal text-slate-400">(empty = free / agree later)</span>
+              Fare per seat, whole route (Rs.) <span className="font-normal text-slate-400">(empty = free / agree later)</span>
             </label>
             <input
               id="fare"
@@ -359,7 +409,7 @@ export function RideForm({
             {guide && (
               <p id="fare-guide" className={`mt-1 text-xs ${tooHigh ? "font-semibold text-red-600" : "text-slate-500"}`}>
                 {tooHigh ? `Too high: at most Rs. ${guide.max} a seat for this route. ` : ""}
-                Fuel share for about {guide.km} km: <b>Rs. {guide.suggested}</b> a seat (petrol Rs. {petrol.price}/litre{petrol.effective ? `, OGRA ${formatDate(petrol.effective)}` : ""}).{" "}
+                Fuel share for about {guide.km} km at {kmpl} km/litre: <b>Rs. {guide.suggested}</b> a seat (petrol Rs. {petrol.price}/litre{petrol.effective ? `, ${formatDate(petrol.effective)}` : ""}). Riders going part of the way pay their part, by distance.{" "}
                 {String(guide.suggested) !== v.fare.trim() && (
                   <button type="button" className="font-semibold text-brand underline" onClick={() => set({ fare: String(guide.suggested) })}>
                     Use Rs. {guide.suggested}

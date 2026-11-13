@@ -19,6 +19,7 @@ import type { ManageData } from "@/lib/rides";
 import type { VerifyMode } from "@/lib/verify";
 import { addDays, describeSchedule } from "@/lib/schedule";
 import { useAutoRefresh } from "@/components/useAutoRefresh";
+import { decodePolyline } from "@/lib/polyline";
 
 const dayWord = (d: string) => (d === todayLocal() ? "Today" : d === addDays(todayLocal(), 1) ? "Tomorrow" : formatDate(d));
 
@@ -134,7 +135,7 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
   const byDate = new Map<string, typeof bookings>();
   for (const b of bookings) byDate.set(b.date, [...(byDate.get(b.date) ?? []), b]);
   const seatsOn = (d: string) => (byDate.get(d) ?? []).reduce((n, b) => n + b.seats, 0);
-  const shareText = `🚗 Carpool: ${title}\n🕒 ${formatTime(ride.departTime)} · ${describeSchedule({ kind: ride.schedule, date: ride.date, days: ride.days, until: ride.until })}\n${ride.fare !== null ? `💵 ${formatFare(ride.fare)} per seat\n` : ""}Book a seat 👉 ${rideUrl}`;
+  const shareText = `🚗 Carpool: ${title}\n🕒 ${formatTime(ride.departTime)} · ${describeSchedule({ kind: ride.schedule, date: ride.date, days: ride.days, until: ride.until })}\n${ride.fare !== null ? `💵 ${formatFare(ride.fare)} per seat for the whole way (less for part of it)\n` : ""}Book a seat 👉 ${rideUrl}`;
 
   const formValues: RideFormValues = {
     kind: ride.kind,
@@ -145,6 +146,7 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
     plate: ride.plate ?? "",
     seats: ride.seats,
     fare: ride.fare === null ? "" : String(ride.fare),
+    kmPerLitre: String(ride.kmPerLitre),
     riders: ride.riders,
     departTime: ride.departTime,
     schedule: ride.schedule,
@@ -205,7 +207,7 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
             {ride.fare !== null ? ` · ${formatFare(ride.fare)}` : ""}
           </span>
         </div>
-        <MapView className="h-52" routes={[{ points }]} markers={loc.pos && sharing ? [{ ...loc.pos, kind: "driver", label: "You" }] : []} fitKey="route" />
+        <MapView className="h-52" routes={[{ points, line: data.line ? decodePolyline(data.line) : undefined }]} markers={loc.pos && sharing ? [{ ...loc.pos, kind: "driver", label: "You" }] : []} fitKey="route" />
         <div className="flex flex-wrap gap-2">
           {ride.status !== "cancelled" && (
             <button type="button" className="btn-ghost" onClick={() => setEditing(true)}>
@@ -339,6 +341,7 @@ export function ManageView({ token, data, isNew, saved, verify = null }: { token
                             <span className="truncate">
                               {b.name}
                               {b.seats > 1 && <span className="font-normal text-slate-500"> · {b.seats} seats</span>}
+                              {b.fare !== null && b.fare > 0 && <span className="font-normal text-slate-500"> · {formatFare(b.fare)}</span>}
                             </span>
                             {b.boarded && <span className="shrink-0 rounded-full bg-emerald-50 px-2 text-xs font-bold text-emerald-700">On board ✓</span>}
                           </div>

@@ -6,7 +6,23 @@ import type * as Leaflet from "leaflet";
 import { REGION_CENTER } from "@/lib/places";
 import type { LatLng } from "@/lib/geo";
 
-export type MapRoute = { points: (LatLng & { name: string })[]; color?: string; highlight?: [number, number] };
+/** `line`: the route along the roads (lib/polyline.ts); without it, stops are joined by a dotted straight line. */
+export type MapRoute = { points: (LatLng & { name: string })[]; line?: LatLng[]; color?: string; highlight?: [number, number] };
+
+/** The part of a road line between two stops: from the line point closest to `a` to the one closest to `b`. */
+function lineBetween(line: LatLng[], a: LatLng, b: LatLng) {
+  const near = (p: LatLng, from: number) => {
+    let best = from;
+    let bd = Infinity;
+    for (let i = from; i < line.length; i++) {
+      const d = (line[i].lat - p.lat) ** 2 + (line[i].lng - p.lng) ** 2;
+      if (d < bd) [bd, best] = [d, i];
+    }
+    return best;
+  };
+  const i = near(a, 0);
+  return line.slice(i, near(b, i) + 1);
+}
 /** Popup text is always escaped: names and places come from users. */
 export type MapMarker = LatLng & { kind: "driver" | "rider" | "me" | "pin"; label?: string; popup?: { title: string; lines?: string[]; link?: { href: string; text: string } } };
 
@@ -90,10 +106,22 @@ export function MapView({
     for (const r of routes) {
       if (!r.points.length) continue;
       const latlngs = r.points.map((p) => [p.lat, p.lng] as [number, number]);
-      leaflet.polyline(latlngs, { color: r.color ?? "#0f766e", weight: 5, opacity: 0.55, dashArray: "1 10", lineCap: "round" }).addTo(g);
-      if (r.highlight) {
-        const [a, b] = r.highlight;
-        leaflet.polyline(latlngs.slice(a, b + 1), { color: r.color ?? "#0f766e", weight: 6, opacity: 0.95 }).addTo(g);
+      const color = r.color ?? "#0f766e";
+      if (r.line && r.line.length > 1) {
+        const road = r.line.map((p) => [p.lat, p.lng] as [number, number]);
+        leaflet.polyline(road, { color, weight: 5, opacity: r.highlight ? 0.35 : 0.75, lineCap: "round", lineJoin: "round" }).addTo(g);
+        if (r.highlight) {
+          const [a, b] = r.highlight;
+          const part = lineBetween(r.line, r.points[a], r.points[b]).map((p) => [p.lat, p.lng] as [number, number]);
+          leaflet.polyline(part, { color, weight: 6, opacity: 0.95, lineCap: "round", lineJoin: "round" }).addTo(g);
+        }
+        road.forEach((p) => bounds.push(p));
+      } else {
+        leaflet.polyline(latlngs, { color, weight: 5, opacity: 0.55, dashArray: "1 10", lineCap: "round" }).addTo(g);
+        if (r.highlight) {
+          const [a, b] = r.highlight;
+          leaflet.polyline(latlngs.slice(a, b + 1), { color, weight: 6, opacity: 0.95 }).addTo(g);
+        }
       }
       r.points.forEach((p, i) => {
         const end = i === 0 || i === r.points.length - 1;

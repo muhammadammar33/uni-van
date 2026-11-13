@@ -23,6 +23,8 @@ import type { VerifyMode } from "@/lib/verify";
 import { ChatButton } from "@/components/carpool/RideChat";
 import { useAutoRefresh } from "@/components/useAutoRefresh";
 import { SosButton } from "@/components/carpool/SosButton";
+import { partFare } from "@/lib/fare";
+import { decodePolyline } from "@/lib/polyline";
 
 const PROFILE = "hamsafar:rider";
 const bookingKey = (slug: string) => `hamsafar:booking:${slug}`;
@@ -70,6 +72,10 @@ export function RideView({
   const [pickup, setPickup] = useState(Math.min(Math.max(0, start.p ?? 0), last - 1));
   const [drop, setDrop] = useState(Math.max(Math.min(last, start.d ?? last), 1));
   const [seats, setSeats] = useState(1);
+  // Riders pay for their part of the route, by road distance (lib/fare.ts).
+  const myFare = partFare(ride.fare, ride.legKm, pickup, drop);
+  const myKm = ride.legKm.slice(pickup, drop).reduce((a, b) => a + b, 0);
+  const roadLine = useMemo(() => (ride.line ? decodePolyline(ride.line) : undefined), [ride.line]);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [gender, setGender] = useState<Gender | null>(idGender ?? (ride.riders === "anyone" ? null : ride.riders));
@@ -206,7 +212,7 @@ export function RideView({
   return (
     <main className="relative mx-auto -mt-10 max-w-2xl space-y-4 px-4 pb-16">
       <section className="card !p-3">
-        <MapView className="h-64 sm:h-80" routes={[{ points: ride.points, highlight: [pickup, drop] }]} markers={markers} fitKey="route" />
+        <MapView className="h-64 sm:h-80" routes={[{ points: ride.points, line: roadLine, highlight: [pickup, drop] }]} markers={markers} fitKey="route" />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-slate-500">
           {driver ? (
             <span className="flex items-center gap-1.5 font-semibold text-emerald-700">
@@ -327,6 +333,12 @@ export function RideView({
               </select>
             </div>
           </div>
+          {myFare !== null && myFare > 0 && (
+            <p className="-mt-1 text-sm text-slate-600">
+              About {Math.round(myKm)} km · <b>{formatFare(myFare)}</b> a seat
+              {myFare < (ride.fare ?? 0) && <span className="text-slate-500"> (you pay for your part of the route; the whole way is {formatFare(ride.fare!)})</span>}
+            </p>
+          )}
           {!needsSignIn && (
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
@@ -400,7 +412,7 @@ export function RideView({
             </div>
           ) : (
             <button className="btn-primary w-full py-3.5 text-base" disabled={!ready || busy}>
-              {busy ? "Booking…" : `Book ${seats > 1 ? `${seats} seats` : "my seat"}${ride.fare !== null ? ` · ${formatFare(ride.fare * seats)}` : ""}`}
+              {busy ? "Booking…" : `Book ${seats > 1 ? `${seats} seats` : "my seat"}${myFare !== null && myFare > 0 ? ` · ${formatFare(myFare * seats)}` : ""}`}
             </button>
           )}
           <p className="text-center text-xs text-slate-500">

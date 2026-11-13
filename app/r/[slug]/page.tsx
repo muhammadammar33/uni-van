@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: PageProps<"/r/[slug]">): Prom
   if (!ride) return { title: "Ride not found" };
   const from = ride.points[0].name;
   const to = ride.points[ride.points.length - 1].name;
-  const description = `${formatTime(ride.departTime)} · ${describeSchedule(ride.schedule)}${ride.fare !== null ? ` · ${formatFare(ride.fare)} per seat` : ""}. Book a seat on Hamsafar.`;
+  const description = `${formatTime(ride.departTime)} · ${describeSchedule(ride.schedule)}${ride.fare !== null && ride.fare > 0 ? ` · up to ${formatFare(ride.fare)} a seat` : ""}. Book a seat on Hamsafar.`;
   return { title: `${from} → ${to}`, description, openGraph: { title: `🚗 ${from} → ${to}`, description } };
 }
 
@@ -53,7 +53,7 @@ export default async function RidePage({ params, searchParams }: PageProps<"/r/[
           </div>
           <p className="mt-1 text-teal-50/90">
             {formatTime(ride.departTime)} · {describeSchedule(ride.schedule)}
-            {ride.fare !== null ? ` · ${formatFare(ride.fare)} per seat` : " · Free"}
+            {ride.fare !== null && ride.fare > 0 ? ` · ${formatFare(ride.fare)} a seat for the whole way` : " · Free"}
           </p>
         </div>
       </header>
