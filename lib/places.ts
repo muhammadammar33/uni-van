@@ -84,6 +84,7 @@ export const PLACES: Place[] = [
   P("Universities & colleges", "nust-eme", "NUST College of EME (near H-13)", 33.6213, 72.9593),
   P("Universities & colleges", "qau", "Quaid-i-Azam University", 33.747, 73.138),
   P("Universities & colleges", "comsats-isb", "COMSATS Islamabad (Park Road)", 33.6498, 73.1549),
+  P("Universities & colleges", "abasyn-isb", "Abasyn University (Park Road)", 33.667, 73.1503),
   P("Universities & colleges", "hamdard-isb", "Hamdard University (Park Road)", 33.6483, 73.157),
   P("Universities & colleges", "hsa", "Health Services Academy (NIH, Chak Shahzad)", 33.6885, 73.1414),
   P("Universities & colleges", "pieas", "PIEAS, Nilore", 33.6532, 73.2669),
