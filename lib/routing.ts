@@ -31,13 +31,20 @@ async function viaOrs(points: LatLng[], key: string): Promise<RoadRoute | null> 
   const res = await fetch("https://api.openrouteservice.org/v2/directions/driving-car", {
     method: "POST",
     headers: { authorization: key, "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({ coordinates: points.map((p) => [p.lng, p.lat]), instructions: false }),
+    // Per-leg distances ("segments") only come with instructions on; the turn-by-turn text itself is dropped.
+    body: JSON.stringify({ coordinates: points.map((p) => [p.lng, p.lat]), instructions: true, geometry_simplify: false }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.warn(`[routing] OpenRouteService answered ${res.status}; using OSRM`);
+    return null;
+  }
   const j = (await res.json()) as { routes?: { summary: { distance: number }; segments?: { distance: number }[]; geometry: string }[] };
   const r = j.routes?.[0];
-  if (!r?.segments || r.segments.length !== points.length - 1) return null;
+  if (!r?.segments || r.segments.length !== points.length - 1) {
+    console.warn("[routing] OpenRouteService gave no per-leg distances; using OSRM");
+    return null;
+  }
   return { km: r1(r.summary.distance / 1000), legKm: r.segments.map((s) => r1(s.distance / 1000)), line: encodePolyline(thin(decodePolyline(r.geometry))), source: "ors" };
 }
 
@@ -64,8 +71,8 @@ export async function roadRoute(points: LatLng[]): Promise<RoadRoute> {
       const r = await get();
       // A road route far longer than the straight line usually means a stop snapped to the wrong road.
       if (r && r.km > 0 && r.legKm.every((k, i) => k <= distanceKm(points[i], points[i + 1]) * 4 + 3)) return r;
-    } catch {
-      /* try the next one */
+    } catch (err) {
+      console.warn("[routing] route service failed:", (err as Error).name);
     }
   }
   return straightRoute(points);
